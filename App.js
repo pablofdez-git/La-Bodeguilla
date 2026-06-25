@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, StatusBar } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from './supabase';
-import { Eye, ClipboardList, ShoppingCart, Plus, Minus, Trash2, CheckSquare, Settings } from 'lucide-react-native';
+// Importamos todos los iconos que necesitamos de la librería que te funciona bien
+import { Eye, ClipboardList, ShoppingCart, Settings, Plus, Minus, CheckSquare, Trash2, SlidersHorizontal, Save } from 'lucide-react-native';
 
 const CATEGORIAS = ['Todos', 'Bebidas', 'Mezcla', 'Limpieza', 'Otros'];
-// Categorías reales para el formulario (quitando 'Todos')
 const CATEGORIAS_FORM = ['Bebidas', 'Mezcla', 'Limpieza', 'Otros'];
 
 function ContenidoApp() {
@@ -26,7 +26,7 @@ function ContenidoApp() {
   const [mostrandoAñadirTienda, setMostrandoAñadirTienda] = useState(false);
   const [nuevaTiendaNombre, setNuevaTiendaNombre] = useState('');
 
-  // Estados de la nueva pestaña GESTIÓN (Añadir productos al inventario)
+  // Estados de la pestaña GESTIÓN
   const [nuevoProdNombre, setNuevoProdNombre] = useState('');
   const [nuevoProdCategoria, setNuevoProdCategoria] = useState('Bebidas');
   const [nuevoProdMinimo, setNuevoProdMinimo] = useState('2');
@@ -35,7 +35,6 @@ function ContenidoApp() {
     try {
       setCargando(true);
 
-      // 1. Traer productos de la alacena
       const { data: prodData, error: prodError } = await supabase
         .from('productos')
         .select('*')
@@ -47,7 +46,6 @@ function ContenidoApp() {
       prodData.forEach(p => { temp[p.id] = p.stock_actual; });
       setStockTemporal(temp);
 
-      // 2. Traer extras de compra pendientes
       const { data: extData, error: extError } = await supabase
         .from('extras_compra')
         .select('*')
@@ -56,7 +54,6 @@ function ContenidoApp() {
       if (extError) throw extError;
       setExtras(extData);
 
-      // 3. Traer la lista de tiendas
       const { data: tienData, error: tienError } = await supabase
         .from('tiendas')
         .select('*')
@@ -97,9 +94,9 @@ function ContenidoApp() {
       }
       await cargarDatos();
       setPestanaActual('visual');
-      alert('¡Recuento guardado en La Bodeguilla!');
+      Alert.alert('Éxito', '¡Recuento guardado en La Bodeguilla!');
     } catch (error) {
-      alert('Error al guardar el recuento');
+      Alert.alert('Error', 'No se pudo guardar el recuento');
     } finally {
       setCargando(false);
     }
@@ -107,7 +104,7 @@ function ContenidoApp() {
 
   const añadirALaCompra = async () => {
     if (!nombreCompra.trim()) {
-      alert('Pon el nombre de lo que hay que comprar, melón.');
+      Alert.alert('Aviso', 'Pon el nombre de lo que hay que comprar, melón.');
       return;
     }
     try {
@@ -135,7 +132,7 @@ function ContenidoApp() {
 
       if (error) {
         if (error.code === '23505') {
-          alert('Ese sitio ya está en la lista, no dupliques.');
+          Alert.alert('Aviso', 'Ese sitio ya está en la lista.');
         } else throw error;
       } else {
         setLugarCompra(nombreLimpio);
@@ -160,7 +157,7 @@ function ContenidoApp() {
         setLugarCompra(tiendas.length > 1 ? tiendas.find(t => t.id !== id).nombre : '');
       }
       await cargarDatos();
-      alert(`Sitio "${nombre}" eliminado de la lista.`);
+      Alert.alert('Eliminado', `Sitio "${nombre}" quitado de la lista.`);
     } catch (error) {
       console.error(error.message);
     }
@@ -200,9 +197,9 @@ function ContenidoApp() {
       await cargarDatos();
 
       if (productoExistente) {
-        alert(`¡Comprado! Se han sumado ${cantidadASumar} a "${productoExistente.nombre}".`);
+        Alert.alert('Comprado', `Suman ${cantidadASumar} unidades a "${productoExistente.nombre}".`);
       } else {
-        alert(`¡Comprado! Quitado de la lista (no varió stock porque "${nombreReal}" no coincide con la Alacena).`);
+        Alert.alert('Comprado', `Quitado de la lista.`);
       }
 
     } catch (error) {
@@ -221,16 +218,15 @@ function ContenidoApp() {
     }
   };
 
-  // --- 🔥 NUEVAS FUNCIONES: CREAR Y ELIMINAR ELEMENTOS DEL INVENTARIO ---
   const registrarNuevoProductoInventario = async () => {
     if (!nuevoProdNombre.trim()) {
-      alert('Escribe el nombre del artículo que quieres añadir a la alacena.');
+      Alert.alert('Falta campo', 'Escribe el nombre del artículo.');
       return;
     }
 
     const minimoNumerico = parseInt(nuevoProdMinimo, 10);
     if (isNaN(minimoNumerico) || minimoNumerico < 0) {
-      alert('El stock mínimo tiene que ser un número válido (0 o más).');
+      Alert.alert('Falta campo', 'El stock mínimo debe ser un número.');
       return;
     }
 
@@ -242,22 +238,21 @@ function ContenidoApp() {
           nombre: nuevoProdNombre.trim(),
           categoria: nuevoProdCategoria,
           stock_minimo: minimoNumerico,
-          stock_actual: 0 // Empieza a cero hasta que se cuente o se compre
+          stock_actual: 0
         }]);
 
       if (error) {
         if (error.code === '23505') {
-          alert('Ese producto ya existe en la Alacena, no lo metas repetido.');
+          Alert.alert('Aviso', 'Ese producto ya existe en la Alacena.');
         } else throw error;
       } else {
-        alert(`"${nuevoProdNombre.trim()}" añadido correctamente a la Alacena.`);
+        Alert.alert('Registrado', `"${nuevoProdNombre.trim()}" añadido correctamente.`);
         setNuevoProdNombre('');
         setNuevoProdMinimo('2');
         await cargarDatos();
       }
     } catch (error) {
       console.error(error.message);
-      alert('Error al añadir el producto a la base de datos.');
     } finally {
       setCargando(false);
     }
@@ -272,26 +267,23 @@ function ContenidoApp() {
         .eq('id', id);
 
       if (error) throw error;
-
-      alert(`"${nombre}" ha sido eliminado del inventario.`);
       await cargarDatos();
+      Alert.alert('Eliminado', `"${nombre}" borrado.`);
     } catch (error) {
       console.error(error.message);
-      alert('No se pudo borrar. Puede estar referenciado en otra tabla.');
     } finally {
       setCargando(false);
     }
   };
 
-
   const generarListaCompraAgrupada = () => {
-    const lista = {};
+    const list = {};
     extras.forEach(e => {
       const tienda = e.lugar_compra || 'Mercadona';
-      if (!lista[tienda]) lista[tienda] = [];
-      lista[tienda].push(e);
+      if (!list[tienda]) list[tienda] = [];
+      list[tienda].push(e);
     });
-    return lista;
+    return list;
   };
 
   const productosFiltrados = categoriaSeleccionada === 'Todos'
@@ -312,7 +304,7 @@ function ContenidoApp() {
       ) : (
         <View style={{ flex: 1 }}>
 
-          {/* PESTAÑA 1: INVENTARIO VISUAL (ALACENA) */}
+          {/* PESTAÑA 1: INVENTARIO VISUAL */}
           {pestanaActual === 'visual' && (
             <View style={{ flex: 1 }}>
               <View style={styles.contenedorFiltros}>
@@ -341,7 +333,7 @@ function ContenidoApp() {
                     <View style={[styles.tarjeta, bajo && styles.tarjetaAlerta]}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.prodNombre}>{item.nombre}</Text>
-                        <Text style={styles.prodSub}>{item.categoria} • Mínimo: {item.stock_minimo}</Text>
+                        <Text style={styles.prodSub}>{item.categoria} • MÍNIMO: {item.stock_minimo}</Text>
                       </View>
                       <Text style={[styles.txtStock, bajo && styles.txtStockAlerta]}>{item.stock_actual}</Text>
                     </View>
@@ -363,18 +355,18 @@ function ContenidoApp() {
                     <Text style={styles.prodNombreRecuento}>{item.nombre}</Text>
                     <View style={styles.controlesRecuento}>
                       <TouchableOpacity style={styles.btnMenos} onPress={() => modificarStockTemporal(item.id, -1)}>
-                        <Text style={styles.btnTexto}>-</Text>
+                        <Minus color="#555" size={18} />
                       </TouchableOpacity>
                       <Text style={styles.txtStockTemp}>{stockTemporal[item.id] ?? 0}</Text>
                       <TouchableOpacity style={styles.btnMas} onPress={() => modificarStockTemporal(item.id, 1)}>
-                        <Text style={styles.btnTexto}>+</Text>
+                        <Plus color="#fff" size={18} />
                       </TouchableOpacity>
                     </View>
                   </View>
                 )}
               />
               <TouchableOpacity style={styles.btnGuardar} onPress={guardarRecuento}>
-                <Text style={styles.txtGuardar}>Confirmar Recuento</Text>
+                <Text style={styles.txtGuardar}>CONFIRMAR RECUENTO</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -395,20 +387,19 @@ function ContenidoApp() {
                 <Text style={styles.labelForm}>Cantidad:</Text>
                 <View style={styles.selectorCantidad}>
                   <TouchableOpacity style={styles.btnCant} onPress={() => setCantidadCompra(m => Math.max(1, m - 1))}>
-                    <Minus size={20} color="#5B3281" />
+                    <Minus color="#5B3281" size={20} />
                   </TouchableOpacity>
                   <Text style={styles.txtCantNum}>{cantidadCompra}</Text>
                   <TouchableOpacity style={styles.btnCant} onPress={() => setCantidadCompra(m => m + 1)}>
-                    <Plus size={20} color="#5B3281" />
+                    <Plus color="#5B3281" size={20} />
                   </TouchableOpacity>
                 </View>
 
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <Text style={[styles.labelForm, { marginBottom: 0 }]}>¿Dónde se compra?</Text>
-                  <TouchableOpacity onPress={() => setMostrandoAñadirTienda(!mostrandoAñadirTienda)}>
-                    <Text style={{ color: '#5B3281', fontWeight: 'bold', fontSize: 13 }}>
-                      {mostrandoAñadirTienda ? 'Cerrar Ajustes' : '⚙️ Gestionar Sitios'}
-                    </Text>
+                  <TouchableOpacity onPress={() => setMostrandoAñadirTienda(!mostrandoAñadirTienda)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <SlidersHorizontal color="#5B3281" size={14} />
+                    <Text style={{ color: '#5B3281', fontWeight: 'bold', fontSize: 13 }}>Config. Sitios</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -423,16 +414,16 @@ function ContenidoApp() {
                         onChangeText={setNuevaTiendaNombre}
                       />
                       <TouchableOpacity style={styles.btnMiniGuardar} onPress={registrarNuevaTienda}>
-                        <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Añadir</Text>
+                        <Save color="#fff" size={14} />
                       </TouchableOpacity>
                     </View>
 
-                    <Text style={{ fontSize: 12, color: '#8E8E93', fontWeight: '700', marginBottom: 4 }}>Sitios activos:</Text>
+                    <Text style={{ fontSize: 12, color: '#8E8E93', fontWeight: '700', marginBottom: 4 }}>SITIOS ACTIVOS:</Text>
                     {tiendas.map(t => (
                       <View key={t.id} style={styles.filaBorrarTienda}>
                         <Text style={{ color: '#1C1C1E', fontSize: 14, fontWeight: '500' }}>{t.nombre}</Text>
                         <TouchableOpacity style={{ padding: 4 }} onPress={() => eliminarTienda(t.id, t.nombre)}>
-                          <Trash2 size={16} color="#ef4444" />
+                          <Trash2 color="#ef4444" size={14} />
                         </TouchableOpacity>
                       </View>
                     ))}
@@ -447,14 +438,14 @@ function ContenidoApp() {
                       onPress={() => setLugarCompra(t.nombre)}
                     >
                       <Text style={{ color: lugarCompra === t.nombre ? '#fff' : '#555', fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
-                        {t.nombre}
+                        {t.nombre.toUpperCase()}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
 
                 <TouchableOpacity style={styles.btnAñadirExtra} onPress={añadirALaCompra}>
-                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Apuntar en la Lista</Text>
+                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>APUNTAR EN LA LISTA</Text>
                 </TouchableOpacity>
               </View>
 
@@ -463,16 +454,16 @@ function ContenidoApp() {
               ) : (
                 Object.entries(generarListaCompraAgrupada()).map(([tienda, items]) => (
                   <View key={tienda} style={styles.bloqueTienda}>
-                    <Text style={styles.tituloTienda}>🛒 En el {tienda}:</Text>
+                    <Text style={styles.tituloTienda}>🛒 COMPRAR EN: {tienda.toUpperCase()}</Text>
                     {items.map(item => (
                       <View key={item.id} style={styles.itemCompra}>
                         <Text style={styles.txtItemCompra}>• {item.nombre}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                           <TouchableOpacity onPress={() => procesarCompraCompletada(item.id, item.nombre)}>
-                            <CheckSquare size={22} color="#34C759" />
+                            <CheckSquare color="#34C759" size={20} />
                           </TouchableOpacity>
                           <TouchableOpacity onPress={() => eliminarExtraSinSumar(item.id)}>
-                            <Trash2 size={18} color="#ef4444" />
+                            <Trash2 color="#ef4444" size={18} />
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -484,11 +475,11 @@ function ContenidoApp() {
             </ScrollView>
           )}
 
-          {/* 🔥 NUEVA PESTAÑA 4: GESTIÓN DE ARTÍCULOS */}
+          {/* PESTAÑA 4: GESTIÓN DE ARTÍCULOS */}
           {pestanaActual === 'gestion' && (
             <ScrollView style={styles.listaContenido}>
               <View style={styles.formularioExtra}>
-                <Text style={[styles.tituloTienda, { marginBottom: 12 }]}>Añadir Nuevo Artículo al Inventario</Text>
+                <Text style={[styles.tituloTienda, { marginBottom: 12 }]}>AÑADIR NUEVO ARTÍCULO</Text>
 
                 <Text style={styles.labelForm}>Nombre del Producto:</Text>
                 <TextInput
@@ -508,13 +499,13 @@ function ContenidoApp() {
                       onPress={() => setNuevoProdCategoria(cat)}
                     >
                       <Text style={{ color: nuevoProdCategoria === cat ? '#fff' : '#555', fontSize: 12, fontWeight: '600' }}>
-                        {cat}
+                        {cat.toUpperCase()}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
 
-                <Text style={styles.labelForm}>Stock Mínimo (Aviso de alerta):</Text>
+                <Text style={styles.labelForm}>Stock Mínimo:</Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Ej: 2"
@@ -525,22 +516,20 @@ function ContenidoApp() {
                 />
 
                 <TouchableOpacity style={[styles.btnAñadirExtra, { backgroundColor: '#34C759', marginTop: 8 }]} onPress={registrarNuevoProductoInventario}>
-                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>Registrar en Base de Datos</Text>
+                  <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>REGISTRAR EN BASE DE DATOS</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Lista para poder purgar artículos viejos */}
               <View style={styles.bloqueTienda}>
-                <Text style={styles.tituloTienda}>Eliminar Artículos Existentes</Text>
-                <Text style={{ fontSize: 12, color: '#8E8E93', marginBottom: 10 }}>Cuidado: si borras un producto aquí, desaparecerá de la alacena y del recuento.</Text>
+                <Text style={styles.tituloTienda}>ELIMINAR ARTÍCULOS EXISTENTES</Text>
                 {productos.map(p => (
                   <View key={p.id} style={styles.itemCompra}>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={{ color: '#1C1C1E', fontSize: 15, fontWeight: '600' }}>{p.nombre}</Text>
-                      <Text style={{ color: '#8E8E93', fontSize: 11 }}>{p.categoria} • Mín: {p.stock_minimo}</Text>
+                      <Text style={{ color: '#8E8E93', fontSize: 11, marginTop: 2 }}>{p.categoria} • Mín: {p.stock_minimo}</Text>
                     </View>
                     <TouchableOpacity onPress={() => eliminarProductoInventario(p.id, p.nombre)}>
-                      <Trash2 size={18} color="#ef4444" />
+                      <Trash2 color="#ef4444" size={16} />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -552,7 +541,7 @@ function ContenidoApp() {
         </View>
       )}
 
-      {/* MENÚ INFERIOR (Ahora con 4 botones) */}
+      {/* 🔥 AQUÍ ESTÁ: TU BARRA ORIGINAL CON ICONOS VECTORIALES DE LUCIDE REPARADA */}
       <View style={[styles.menuInferior, { paddingBottom: insets.bottom, height: 65 + insets.bottom }]}>
         <TouchableOpacity style={styles.btnTab} onPress={() => setPestanaActual('visual')}>
           <Eye size={22} color={pestanaActual === 'visual' ? '#5B3281' : '#8E8E93'} />
@@ -600,19 +589,22 @@ const styles = StyleSheet.create({
   textoFiltro: { color: '#555', fontWeight: '600', fontSize: 13 },
   textoFiltroActivo: { color: '#fff' },
   listaContenido: { padding: 16 },
+
   tarjeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: 18, borderRadius: 12, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   tarjetaAlerta: { backgroundColor: '#FDF2F2', borderWidth: 1, borderColor: '#F8B4B4' },
   prodNombre: { fontSize: 17, fontWeight: 'bold', color: '#1C1C1E' },
   prodSub: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
-  txtStock: { fontSize: 22, fontWeight: 'bold', color: '#34C759' },
+  txtStock: { fontSize: 22, fontWeight: 'bold', color: '#34C759', minWidth: 30, textAlign: 'center' },
   txtStockAlerta: { color: '#FF3B30' },
 
   tarjetaRecuento: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: 14, borderRadius: 12, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   prodNombreRecuento: { fontSize: 16, color: '#1C1C1E', fontWeight: '500', flex: 1 },
   controlesRecuento: { flexDirection: 'row', alignItems: 'center' },
+
   btnMenos: { backgroundColor: '#E5E5EA', width: 40, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   btnMas: { backgroundColor: '#5B3281', width: 40, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
   btnTexto: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+
   txtStockTemp: { color: '#1C1C1E', fontSize: 20, fontWeight: 'bold', marginHorizontal: 18, minWidth: 25, textAlign: 'center' },
   btnGuardar: { backgroundColor: '#5B3281', margin: 16, padding: 16, borderRadius: 12, alignItems: 'center' },
   txtGuardar: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
@@ -631,8 +623,11 @@ const styles = StyleSheet.create({
   cajaGestionTiendas: { backgroundColor: '#F4F4F6', padding: 12, borderRadius: 8, marginBottom: 14, borderWidth: 1, borderColor: '#E5E5EA' },
   miniFormTienda: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: 6, borderRadius: 6, marginBottom: 10, borderWidth: 1, borderColor: '#E5E5EA' },
   miniInput: { flex: 1, color: '#1C1C1E', fontSize: 13, paddingVertical: 4, paddingHorizontal: 6 },
-  btnMiniGuardar: { backgroundColor: '#5B3281', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6 },
+  btnMiniGuardar: { backgroundColor: '#5B3281', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
   filaBorrarTienda: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#E5E5EA', paddingHorizontal: 4 },
+
+  btnFalsoBorrar: { paddingVertical: 6, paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center' },
+  btnFalsoCheck: { paddingVertical: 6, paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center' },
 
   btnAñadirExtra: { backgroundColor: '#5B3281', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 4 },
   bloqueTienda: { backgroundColor: '#ffffff', padding: 16, borderRadius: 12, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
