@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, StatusBar, Alert, Image } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from './supabase';
-// Importamos AsyncStorage para guardar monedas y rachas localmente
-import AsyncStorage from '@react-native-async-storage/async-storage';
 // Sumamos LogOut y Flame para el botón de salida y el contador de racha
 import { Eye, ClipboardList, ShoppingCart, Settings, Plus, Minus, CheckSquare, Trash2, SlidersHorizontal, Save, Gamepad, Dices, Trophy, AlertTriangle, RefreshCw, Layers, LogOut, Flame } from 'lucide-react-native';
 
@@ -75,12 +73,9 @@ function ContenidoApp() {
   const [mensajeResultado, setMensajeResultado] = useState('');
   const [verTapete, setVerTapete] = useState(false); // Para controlar si estamos en el lobby o jugando
 
-  // Contadores de rachas y monedas locales con AsyncStorage
+  // Contadores de rachas en memoria de la sesión
   const [rachaActual, setRachaActual] = useState(0);
   const [rachaMaxima, setRachaMaxima] = useState(0);
-  const [monedas, setMonedas] = useState(500);
-  const [apuestaActual, setApuestaActual] = useState(50);
-  const LIMITE_APUESTA_MAX = 50; // Capado máximo para que no rompan la banca
 
   const cargarDatos = async () => {
     try {
@@ -109,34 +104,7 @@ function ContenidoApp() {
     }
   };
 
-  // Cargar datos de la peña y casino al iniciar la app
-  useEffect(() => {
-    cargarDatos();
-    cargarDatosCasinoLocal();
-  }, []);
-
-  // Funciones de persistencia local para el Casino
-  const cargarDatosCasinoLocal = async () => {
-    try {
-      const localRacha = await AsyncStorage.getItem('@bj_racha_actual');
-      const localMaxRacha = await AsyncStorage.getItem('@bj_racha_maxima');
-      const localMonedas = await AsyncStorage.getItem('@bj_monedas');
-
-      if (localRacha !== null) setRachaActual(parseInt(localRacha, 10));
-      if (localMaxRacha !== null) setRachaMaxima(parseInt(localMaxRacha, 10));
-      if (localMonedas !== null) setMonedas(parseInt(localMonedas, 10));
-    } catch (e) {
-      console.error('Error cargando datos locales del casino', e);
-    }
-  };
-
-  const guardarDatoCasinoLocal = async (clave, valor) => {
-    try {
-      await AsyncStorage.setItem(clave, valor.toString());
-    } catch (e) {
-      console.error('Error guardando dato local del casino', e);
-    }
-  };
+  useEffect(() => { cargarDatos(); }, []);
 
   const modificarStockTemporal = (id, cambio) => {
     setStockTemporal(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + cambio) }));
@@ -294,7 +262,7 @@ function ContenidoApp() {
     const palos = ['♦', '♣', '♥', '♠'];
     const valores = [
       { nombre: 'A', valor: 11 }, { nombre: '2', valor: 2 }, { nombre: '3', valor: 3 },
-      { nombre: '4', valor: 4 }, { fontName: '5', valor: 5 }, { nombre: '5', valor: 5 }, { nombre: '6', valor: 6 },
+      { nombre: '4', valor: 4 }, { nombre: '5', valor: 5 }, { nombre: '6', valor: 6 },
       { nombre: '7', valor: 7 }, { nombre: '8', valor: 8 }, { nombre: '9', valor: 9 },
       { nombre: '10', valor: 10 }, { nombre: 'J', valor: 10 }, { nombre: 'Q', valor: 10 }, { nombre: 'K', valor: 10 },
     ];
@@ -314,47 +282,21 @@ function ContenidoApp() {
     return puntos;
   };
 
-  // Actualización de economía y rachas vinculadas a almacenamiento local
-  const finalizarManoCasino = (resultado) => {
-    let nuevasMonedas = monedas;
-    let nuevaRacha = rachaActual;
-
+  const actualizarRacha = (resultado) => {
     if (resultado === 'ganado') {
-      nuevaRacha = rachaActual + 1;
-      nuevasMonedas = monedas + apuestaActual;
-      setRachaActual(nuevaRacha);
-      guardarDatoCasinoLocal('@bj_racha_actual', nuevaRacha);
-
-      if (nuevaRacha > rachaMaxima) {
-        setRachaMaxima(nuevaRacha);
-        guardarDatoCasinoLocal('@bj_racha_maxima', nuevaRacha);
-      }
+      setRachaActual(prev => {
+        const nuevaRacha = prev + 1;
+        if (nuevaRacha > rachaMaxima) {
+          setRachaMaxima(nuevaRacha);
+        }
+        return nuevaRacha;
+      });
     } else if (resultado === 'perdido') {
-      nuevaRacha = 0;
-      nuevasMonedas = monedas - apuestaActual;
       setRachaActual(0);
-      guardarDatoCasinoLocal('@bj_racha_actual', 0);
     }
-
-    if (nuevasMonedas <= 0) {
-      nuevasMonedas = 50;
-      setApuestaActual(50); // Reiniciamos apuesta por defecto tras auxilio
-      Alert.alert('Bancarrota', 'Has perdido todo. Se te asignan 50 monedas de penalización para poder reengancharte.');
-    } else if (apuestaActual > nuevasMonedas) {
-      // Si le quedan menos monedas de las que tenía puestas en el selector, forzamos que baje a su saldo actual
-      setApuestaActual(nuevasMonedas);
-    }
-
-    setMonedas(nuevasMonedas);
-    guardarDatoCasinoLocal('@bj_monedas', nuevasMonedas);
   };
 
   const iniciarPartidaBlackjack = () => {
-    if (monedas < apuestaActual) {
-      Alert.alert('Falta saldo', `No tienes suficientes monedas para cubrir tu apuesta de ${apuestaActual}.`);
-      return;
-    }
-
     setVerTapete(true);
     setEnPartida(false);
     setRepartiendo(true);
@@ -390,16 +332,16 @@ function ContenidoApp() {
 
         if (puntosJ === 21 && puntosC === 21) {
           setResultadoTipo('empate');
-          setMensajeResultado('Doble Blackjack Natural. Empate en la mesa.');
-          finalizarManoCasino('empate');
+          setMensajeResultado('🤝 ¡Doble Blackjack Natural! Empate histórico.');
+          actualizarRacha('empate');
         } else if (puntosJ === 21) {
           setResultadoTipo('ganado');
-          setMensajeResultado('BLACKJACK NATURAL. Ganas la mano automáticamente.');
-          finalizarManoCasino('ganado');
+          setMensajeResultado('🎉 ¡BLACKJACK NATURAL! Ganas la mano al instante.');
+          actualizarRacha('ganado');
         } else {
           setResultadoTipo('perdido');
-          setMensajeResultado('Blackjack del crupier. Gana la casa.');
-          finalizarManoCasino('perdido');
+          setMensajeResultado('❌ ¡Blackjack de la casa! El crupier gana de inicio.');
+          actualizarRacha('perdido');
         }
       } else {
         setEnPartida(true);
@@ -419,9 +361,9 @@ function ContenidoApp() {
 
     if (calcularPuntos(nuevaMano) > 21) {
       setResultadoTipo('perdido');
-      setMensajeResultado('Te has pasado de 21. Gana la casa.');
+      setMensajeResultado('¡Te has pasado del límite! Gana la casa.');
       setEnPartida(false);
-      finalizarManoCasino('perdido');
+      actualizarRacha('perdido');
     }
   };
 
@@ -435,6 +377,7 @@ function ContenidoApp() {
       let puntosJ = calcularPuntos(manoJugador);
       let puntosC = calcularPuntos(manoC);
 
+      // 🛠️ IA ARREGLADA CON AS DINÁMICO: Pide si tiene menos de 17, o si va por detrás de tus puntos y no se ha pasado
       if (puntosC < 17 || (puntosC < puntosJ && puntosC <= 21)) {
         const nuevaCarta = mazoCopia.pop();
         manoC.push(nuevaCarta);
@@ -446,19 +389,19 @@ function ContenidoApp() {
         let finalRes = '';
         if (puntosC > 21) {
           finalRes = 'ganado';
-          setMensajeResultado('El crupier se ha pasado. Victoria para ti.');
+          setMensajeResultado('¡El crupier se ha pasado! ¡Victoria para ti!');
         } else if (puntosJ > puntosC) {
           finalRes = 'ganado';
-          setMensajeResultado('Mayor puntuación. Has ganado la mano.');
+          setMensajeResultado('¡Tienes mayor puntuación! ¡Has ganado!');
         } else if (puntosC > puntosJ) {
           finalRes = 'perdido';
           setMensajeResultado('El crupier tiene mejor mano. Gana la casa.');
         } else {
           finalRes = 'empate';
-          setMensajeResultado('Empate técnico en la mesa.');
+          setMensajeResultado('Tablas. Empate técnico en la mesa.');
         }
         setResultadoTipo(finalRes);
-        finalizarManoCasino(finalRes);
+        actualizarRacha(finalRes);
       }
     };
 
@@ -603,7 +546,7 @@ function ContenidoApp() {
               ) : (
                 Object.entries(generarListaCompraAgrupada()).map(([tienda, items]) => (
                   <View key={tienda} style={styles.bloqueTienda}>
-                    <Text style={styles.tituloTienda}>COMPRAR EN: {tienda.toUpperCase()}</Text>
+                    <Text style={styles.tituloTienda}>🛒 COMPRAR EN: {tienda.toUpperCase()}</Text>
                     {items.map(item => (
                       <View key={item.id} style={styles.itemCompra}>
                         <Text style={styles.txtItemCompra}>• {item.nombre}</Text>
@@ -674,11 +617,6 @@ function ContenidoApp() {
                         <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1C1C1E' }}>BLACK JACK</Text>
                       </View>
 
-                      {/* Monedero del jugador limpio */}
-                      <View style={{ backgroundColor: '#451A60', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, marginVertical: 4 }}>
-                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>MONEDAS: {monedas}</Text>
-                      </View>
-
                       <View style={styles.cajaEstadisticasRachas}>
                         <View style={styles.filaRachaStat}>
                           <Flame size={15} color="#EAB308" />
@@ -692,38 +630,17 @@ function ContenidoApp() {
                         </View>
                       </View>
 
-                      {/* Selector de Apuestas dinámico con límite estricto de 50 */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 6, gap: 12 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#555' }}>Apuesta por mano:</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E5E5EA', borderRadius: 8 }}>
-                          <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaActual(a => Math.max(10, a - 10))}><Minus size={14} color="#000" /></TouchableOpacity>
-                          <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: 'bold', color: '#000' }}>{apuestaActual}</Text>
-                          <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaActual(a => Math.min(LIMITE_APUESTA_MAX, monedas, a + 10))}><Plus size={14} color="#000" /></TouchableOpacity>
-                        </View>
-                      </View>
-
-                      <Text style={{ fontSize: 11, color: '#8E8E93', fontWeight: '600', marginBottom: 10 }}>
-                        Apuesta mínima: 10 | Apuesta máxima: {LIMITE_APUESTA_MAX}
-                      </Text>
-
-                      <Text style={{ fontSize: 12, color: '#666', textAlign: 'center', marginBottom: 14 }}>
+                      <Text style={{ fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 14 }}>
                         Juega contra la casa. La banca pide con menos de 17 puntos.
                       </Text>
 
                       <TouchableOpacity style={styles.btnIniciarJuegoPremium} onPress={iniciarPartidaBlackjack}>
-                        <Text style={styles.txtBtnJuegoText}>JUGAR MANO</Text>
+                        <Text style={styles.txtBtnJuegoText}>JUGAR AHORA</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
                 ) : (
                   <View style={{ width: '100%', padding: 14 }}>
-
-                    {/* HUD del tapete sin emojis */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginBottom: 4 }}>
-                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Saldo: {monedas}</Text>
-                      <Text style={{ color: '#FEF08A', fontSize: 12, fontWeight: '700' }}>Apuesta: {apuestaActual}</Text>
-                    </View>
-
                     <View style={styles.zonaJugadorFila}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, width: '100%', paddingHorizontal: 4 }}>
                         <Text style={styles.txtMarcadorEtiqueta}>CRUPIER BANCA</Text>
