@@ -1,44 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, StatusBar, Alert, Image } from 'react-native';
+import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from './supabase';
-// Importamos AsyncStorage para guardar monedas y rachas localmente
-import AsyncStorage from '@react-native-async-storage/async-storage';
-// Sumamos LogOut y Flame para el botón de salida y el contador de racha
-import { Eye, ClipboardList, ShoppingCart, Settings, Plus, Minus, CheckSquare, Trash2, SlidersHorizontal, Save, Gamepad, Dices, Trophy, AlertTriangle, RefreshCw, Layers, LogOut, Flame } from 'lucide-react-native';
+import { Eye, ClipboardList, ShoppingCart, Settings, Plus, Minus, CheckSquare, Trash2, SlidersHorizontal, Save, Gamepad } from 'lucide-react-native';
+// Importamos el archivo independiente del casino
+import Casino from './Casino';
 
 const CATEGORIAS = ['Todos', 'Bebidas', 'Mezcla', 'Limpieza', 'Otros'];
 const CATEGORIAS_FORM = ['Bebidas', 'Mezcla', 'Limpieza', 'Otros'];
-
-// Componente de Carta Rediseñado (Más Premium y con sombra suave)
-function RenderizarCarta({ nombre, palo, oculta }) {
-  if (oculta) {
-    return (
-      <View style={styles.cartaEstilo}>
-        <Image
-          source={require('./assets/Javicristo.png')}
-          style={{ width: '100%', height: '100%' }}
-          resizeMode="cover"
-        />
-      </View>
-    );
-  }
-
-  const esRojo = palo === '♦' || palo === '♥';
-  return (
-    <View style={styles.cartaEstilo}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%' }}>
-        <Text style={[styles.textoCartaEsquina, { color: esRojo ? '#EF4444' : '#1C1C1E' }]}>{nombre}</Text>
-        <Text style={[styles.paloCartaEsquina, { color: esRojo ? '#EF4444' : '#1C1C1E' }]}>{palo}</Text>
-      </View>
-      <Text style={[styles.paloCartaCentral, { color: esRojo ? '#EF4444' : '#1C1C1E' }]}>{palo}</Text>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', transform: [{ rotate: '180deg' }] }}>
-        <Text style={[styles.textoCartaEsquina, { color: esRojo ? '#EF4444' : '#1C1C1E' }]}>{nombre}</Text>
-        <Text style={[styles.paloCartaEsquina, { color: esRojo ? '#EF4444' : '#1C1C1E' }]}>{palo}</Text>
-      </View>
-    </View>
-  );
-}
 
 function ContenidoApp() {
   const insets = useSafeAreaInsets();
@@ -62,25 +31,6 @@ function ContenidoApp() {
   const [nuevoProdNombre, setNuevoProdNombre] = useState('');
   const [nuevoProdCategoria, setNuevoProdCategoria] = useState('Bebidas');
   const [nuevoProdMinimo, setNuevoProdMinimo] = useState('2');
-
-  // ==========================================
-  //         ESTADOS DEL BLACKJACK
-  // ==========================================
-  const [enPartida, setEnPartida] = useState(false);
-  const [repartiendo, setRepartiendo] = useState(false);
-  const [baraja, setBaraja] = useState([]);
-  const [manoJugador, setManoJugador] = useState([]);
-  const [manoCrupier, setManoCrupier] = useState([]);
-  const [resultadoTipo, setResultadoTipo] = useState('');
-  const [mensajeResultado, setMensajeResultado] = useState('');
-  const [verTapete, setVerTapete] = useState(false); // Para controlar si estamos en el lobby o jugando
-
-  // Contadores de rachas y monedas locales con AsyncStorage
-  const [rachaActual, setRachaActual] = useState(0);
-  const [rachaMaxima, setRachaMaxima] = useState(0);
-  const [monedas, setMonedas] = useState(500);
-  const [apuestaActual, setApuestaActual] = useState(50);
-  const LIMITE_APUESTA_MAX = 50; // Capado máximo para que no rompan la banca
 
   const cargarDatos = async () => {
     try {
@@ -109,34 +59,9 @@ function ContenidoApp() {
     }
   };
 
-  // Cargar datos de la peña y casino al iniciar la app
   useEffect(() => {
     cargarDatos();
-    cargarDatosCasinoLocal();
   }, []);
-
-  // Funciones de persistencia local para el Casino
-  const cargarDatosCasinoLocal = async () => {
-    try {
-      const localRacha = await AsyncStorage.getItem('@bj_racha_actual');
-      const localMaxRacha = await AsyncStorage.getItem('@bj_racha_maxima');
-      const localMonedas = await AsyncStorage.getItem('@bj_monedas');
-
-      if (localRacha !== null) setRachaActual(parseInt(localRacha, 10));
-      if (localMaxRacha !== null) setRachaMaxima(parseInt(localMaxRacha, 10));
-      if (localMonedas !== null) setMonedas(parseInt(localMonedas, 10));
-    } catch (e) {
-      console.error('Error cargando datos locales del casino', e);
-    }
-  };
-
-  const guardarDatoCasinoLocal = async (clave, valor) => {
-    try {
-      await AsyncStorage.setItem(clave, valor.toString());
-    } catch (e) {
-      console.error('Error guardando dato local del casino', e);
-    }
-  };
 
   const modificarStockTemporal = (id, cambio) => {
     setStockTemporal(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + cambio) }));
@@ -285,184 +210,6 @@ function ContenidoApp() {
     } finally {
       setCargando(false);
     }
-  };
-
-  // ==========================================
-  //      LÓGICA DEL BLACKJACK PERFECCIONADA
-  // ==========================================
-  const inicializarBaraja = () => {
-    const palos = ['♦', '♣', '♥', '♠'];
-    const valores = [
-      { nombre: 'A', valor: 11 }, { nombre: '2', valor: 2 }, { nombre: '3', valor: 3 },
-      { nombre: '4', valor: 4 }, { fontName: '5', valor: 5 }, { nombre: '5', valor: 5 }, { nombre: '6', valor: 6 },
-      { nombre: '7', valor: 7 }, { nombre: '8', valor: 8 }, { nombre: '9', valor: 9 },
-      { nombre: '10', valor: 10 }, { nombre: 'J', valor: 10 }, { nombre: 'Q', valor: 10 }, { nombre: 'K', valor: 10 },
-    ];
-    let mazo = [];
-    for (let p of palos) { for (let v of valores) { mazo.push({ ...v, palo: p }); } }
-    for (let i = mazo.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [mazo[i], mazo[j]] = [mazo[j], mazo[i]];
-    }
-    return mazo;
-  };
-
-  const calcularPuntos = (mano) => {
-    let puntos = mano.reduce((tot, c) => tot + c.valor, 0);
-    let ases = mano.filter(c => c.nombre === 'A').length;
-    while (puntos > 21 && ases > 0) { puntos -= 10; ases -= 1; }
-    return puntos;
-  };
-
-  // Actualización de economía y rachas vinculadas a almacenamiento local
-  const finalizarManoCasino = (resultado) => {
-    let nuevasMonedas = monedas;
-    let nuevaRacha = rachaActual;
-
-    if (resultado === 'ganado') {
-      nuevaRacha = rachaActual + 1;
-      nuevasMonedas = monedas + apuestaActual;
-      setRachaActual(nuevaRacha);
-      guardarDatoCasinoLocal('@bj_racha_actual', nuevaRacha);
-
-      if (nuevaRacha > rachaMaxima) {
-        setRachaMaxima(nuevaRacha);
-        guardarDatoCasinoLocal('@bj_racha_maxima', nuevaRacha);
-      }
-    } else if (resultado === 'perdido') {
-      nuevaRacha = 0;
-      nuevasMonedas = monedas - apuestaActual;
-      setRachaActual(0);
-      guardarDatoCasinoLocal('@bj_racha_actual', 0);
-    }
-
-    if (nuevasMonedas <= 0) {
-      nuevasMonedas = 50;
-      setApuestaActual(50); // Reiniciamos apuesta por defecto tras auxilio
-      Alert.alert('Bancarrota', 'Has perdido todo. Se te asignan 50 monedas de penalización para poder reengancharte.');
-    } else if (apuestaActual > nuevasMonedas) {
-      // Si le quedan menos monedas de las que tenía puestas en el selector, forzamos que baje a su saldo actual
-      setApuestaActual(nuevasMonedas);
-    }
-
-    setMonedas(nuevasMonedas);
-    guardarDatoCasinoLocal('@bj_monedas', nuevasMonedas);
-  };
-
-  const iniciarPartidaBlackjack = () => {
-    if (monedas < apuestaActual) {
-      Alert.alert('Falta saldo', `No tienes suficientes monedas para cubrir tu apuesta de ${apuestaActual}.`);
-      return;
-    }
-
-    setVerTapete(true);
-    setEnPartida(false);
-    setRepartiendo(true);
-    setResultadoTipo('');
-    setMensajeResultado('');
-
-    const mazoNuevo = inicializarBaraja();
-    const cJ1 = mazoNuevo.pop();
-    const cC1 = mazoNuevo.pop();
-    const cJ2 = mazoNuevo.pop();
-    const cC2 = mazoNuevo.pop();
-
-    setManoJugador([cJ1]);
-    setManoCrupier([cC1]);
-    setBaraja(mazoNuevo);
-
-    setTimeout(() => {
-      setManoJugador([cJ1, cJ2]);
-    }, 400);
-
-    setTimeout(() => {
-      const manoInicialJugador = [cJ1, cJ2];
-      const manoInicialCrupier = [cC1, cC2];
-
-      setManoCrupier(manoInicialCrupier);
-      setRepartiendo(false);
-
-      const puntosJ = calcularPuntos(manoInicialJugador);
-      const puntosC = calcularPuntos(manoInicialCrupier);
-
-      if (puntosJ === 21 || puntosC === 21) {
-        setEnPartida(false);
-
-        if (puntosJ === 21 && puntosC === 21) {
-          setResultadoTipo('empate');
-          setMensajeResultado('Doble Blackjack Natural. Empate en la mesa.');
-          finalizarManoCasino('empate');
-        } else if (puntosJ === 21) {
-          setResultadoTipo('ganado');
-          setMensajeResultado('BLACKJACK NATURAL. Ganas la mano automáticamente.');
-          finalizarManoCasino('ganado');
-        } else {
-          setResultadoTipo('perdido');
-          setMensajeResultado('Blackjack del crupier. Gana la casa.');
-          finalizarManoCasino('perdido');
-        }
-      } else {
-        setEnPartida(true);
-      }
-    }, 800);
-  };
-
-  const pedirCarta = () => {
-    if (!enPartida || repartiendo) return;
-
-    const mazoCopia = [...baraja];
-    const nuevaCarta = mazoCopia.pop();
-    const nuevaMano = [...manoJugador, nuevaCarta];
-
-    setManoJugador(nuevaMano);
-    setBaraja(mazoCopia);
-
-    if (calcularPuntos(nuevaMano) > 21) {
-      setResultadoTipo('perdido');
-      setMensajeResultado('Te has pasado de 21. Gana la casa.');
-      setEnPartida(false);
-      finalizarManoCasino('perdido');
-    }
-  };
-
-  const plantarse = () => {
-    if (!enPartida || repartiendo) return;
-
-    let mazoCopia = [...baraja];
-    let manoC = [...manoCrupier];
-
-    const ejecutarTurnoCrupier = () => {
-      let puntosJ = calcularPuntos(manoJugador);
-      let puntosC = calcularPuntos(manoC);
-
-      if (puntosC < 17 || (puntosC < puntosJ && puntosC <= 21)) {
-        const nuevaCarta = mazoCopia.pop();
-        manoC.push(nuevaCarta);
-        setManoCrupier([...manoC]);
-        setBaraja(mazoCopia);
-        setTimeout(ejecutarTurnoCrupier, 600);
-      } else {
-        setEnPartida(false);
-        let finalRes = '';
-        if (puntosC > 21) {
-          finalRes = 'ganado';
-          setMensajeResultado('El crupier se ha pasado. Victoria para ti.');
-        } else if (puntosJ > puntosC) {
-          finalRes = 'ganado';
-          setMensajeResultado('Mayor puntuación. Has ganado la mano.');
-        } else if (puntosC > puntosJ) {
-          finalRes = 'perdido';
-          setMensajeResultado('El crupier tiene mejor mano. Gana la casa.');
-        } else {
-          finalRes = 'empate';
-          setMensajeResultado('Empate técnico en la mesa.');
-        }
-        setResultadoTipo(finalRes);
-        finalizarManoCasino(finalRes);
-      }
-    };
-
-    ejecutarTurnoCrupier();
   };
 
   const generarListaCompraAgrupada = () => {
@@ -655,155 +402,9 @@ function ContenidoApp() {
             </ScrollView>
           )}
 
-          {/* PESTAÑA 5: CASINO - MENÚ GENERAL Y JUEGOS */}
+          {/* PESTAÑA 5: CASINO MODULARIZADO */}
           {pestanaActual === 'blackjack' && (
-            <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 12 }}>
-              <View style={styles.tableroCasinoPremium}>
-
-                <View style={styles.cabeceraCasinoMesa}>
-                  <Dices size={20} color="#fff" />
-                  <Text style={styles.txtMesaPremiumTitulo}>CASINO LA BODEGUILLA</Text>
-                  <Gamepad size={18} color="#E2D5EE" />
-                </View>
-
-                {!verTapete ? (
-                  <View style={styles.lobbyCasinoCaja}>
-                    <View style={{ width: '100%', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 12, padding: 16, backgroundColor: '#F4F4F6', alignItems: 'center' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <Layers size={22} color="#5B3281" />
-                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1C1C1E' }}>BLACK JACK</Text>
-                      </View>
-
-                      {/* Monedero del jugador limpio */}
-                      <View style={{ backgroundColor: '#451A60', paddingVertical: 6, paddingHorizontal: 16, borderRadius: 20, marginVertical: 4 }}>
-                        <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>MONEDAS: {monedas}</Text>
-                      </View>
-
-                      <View style={styles.cajaEstadisticasRachas}>
-                        <View style={styles.filaRachaStat}>
-                          <Flame size={15} color="#EAB308" />
-                          <Text style={styles.txtRachaStatLabel}>Racha Actual:</Text>
-                          <Text style={styles.txtRachaStatValor}>{rachaActual}</Text>
-                        </View>
-                        <View style={styles.filaRachaStat}>
-                          <Trophy size={13} color="#34C759" />
-                          <Text style={styles.txtRachaStatLabel}>Racha Máxima:</Text>
-                          <Text style={styles.txtRachaStatValor}>{rachaMaxima}</Text>
-                        </View>
-                      </View>
-
-                      {/* Selector de Apuestas dinámico con límite estricto de 50 */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 6, gap: 12 }}>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#555' }}>Apuesta por mano:</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E5E5EA', borderRadius: 8 }}>
-                          <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaActual(a => Math.max(10, a - 10))}><Minus size={14} color="#000" /></TouchableOpacity>
-                          <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: 'bold', color: '#000' }}>{apuestaActual}</Text>
-                          <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaActual(a => Math.min(LIMITE_APUESTA_MAX, monedas, a + 10))}><Plus size={14} color="#000" /></TouchableOpacity>
-                        </View>
-                      </View>
-
-                      <Text style={{ fontSize: 11, color: '#8E8E93', fontWeight: '600', marginBottom: 10 }}>
-                        Apuesta mínima: 10 | Apuesta máxima: {LIMITE_APUESTA_MAX}
-                      </Text>
-
-                      <Text style={{ fontSize: 12, color: '#666', textAlign: 'center', marginBottom: 14 }}>
-                        Juega contra la casa. La banca pide con menos de 17 puntos.
-                      </Text>
-
-                      <TouchableOpacity style={styles.btnIniciarJuegoPremium} onPress={iniciarPartidaBlackjack}>
-                        <Text style={styles.txtBtnJuegoText}>JUGAR MANO</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={{ width: '100%', padding: 14 }}>
-
-                    {/* HUD del tapete sin emojis */}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginBottom: 4 }}>
-                      <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Saldo: {monedas}</Text>
-                      <Text style={{ color: '#FEF08A', fontSize: 12, fontWeight: '700' }}>Apuesta: {apuestaActual}</Text>
-                    </View>
-
-                    <View style={styles.zonaJugadorFila}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, width: '100%', paddingHorizontal: 4 }}>
-                        <Text style={styles.txtMarcadorEtiqueta}>CRUPIER BANCA</Text>
-                        <View style={styles.badgePuntos}><Text style={styles.txtBadgePuntosText}>{!enPartida && !repartiendo ? `${calcularPuntos(manoCrupier)} PTS` : '???'}</Text></View>
-                      </View>
-                      <View style={styles.filaCartasContenedor}>
-                        {manoCrupier.map((carta, index) => (
-                          <RenderizarCarta key={index} nombre={carta.nombre} palo={carta.palo} oculta={enPartida && index === 1} />
-                        ))}
-                      </View>
-                    </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginVertical: 4 }}>
-                      <View style={[styles.lineaMesaSeparador, { width: '30%', marginVertical: 0 }]} />
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(91,50,129,0.4)', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10 }}>
-                        <Flame size={12} color="#EAB308" />
-                        <Text style={{ color: '#E2D5EE', fontSize: 10, fontWeight: '900' }}>RACHA: {rachaActual}</Text>
-                      </View>
-                      <View style={[styles.lineaMesaSeparador, { width: '30%', marginVertical: 0 }]} />
-                    </View>
-
-                    <View style={styles.zonaJugadorFila}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, width: '100%', paddingHorizontal: 4 }}>
-                        <Text style={styles.txtMarcadorEtiqueta}>TU MANO</Text>
-                        <View style={[styles.badgePuntos, { backgroundColor: '#5B3281' }]}><Text style={styles.txtBadgePuntosText}>{calcularPuntos(manoJugador)} PTS</Text></View>
-                      </View>
-                      <View style={styles.filaCartasContenedor}>
-                        {manoJugador.map((carta, index) => (
-                          <RenderizarCarta key={index} nombre={carta.nombre} palo={carta.palo} oculta={false} />
-                        ))}
-                      </View>
-                    </View>
-
-                    {mensajeResultado ? (
-                      <View style={[
-                        styles.bannerResultadoFino,
-                        resultadoTipo === 'ganado' && { backgroundColor: '#DEF7EC', borderColor: '#34C759' },
-                        resultadoTipo === 'perdido' && { backgroundColor: '#FDE8E8', borderColor: '#FF3B30' },
-                        resultadoTipo === 'empate' && { backgroundColor: '#FEF08A', borderColor: '#EAB308' }
-                      ]}>
-                        {resultadoTipo === 'ganado' && <Trophy size={20} color="#34C759" style={{ marginRight: 8 }} />}
-                        {resultadoTipo === 'perdido' && <AlertTriangle size={20} color="#FF3B30" style={{ marginRight: 8 }} />}
-                        {resultadoTipo === 'empate' && <RefreshCw size={18} color="#EAB308" style={{ marginRight: 8 }} />}
-                        <Text style={[
-                          styles.txtBannerResultadoText,
-                          resultadoTipo === 'ganado' && { color: '#1E4620' },
-                          resultadoTipo === 'perdido' && { color: '#6B1D1D' },
-                          resultadoTipo === 'empate' && { color: '#713F12' }
-                        ]}>{mensajeResultado}</Text>
-                      </View>
-                    ) : null}
-
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
-                      {enPartida ? (
-                        <>
-                          <TouchableOpacity disabled={repartiendo} style={[styles.btnCasinoAccionSecundario, repartiendo && { opacity: 0.5 }]} onPress={pedirCarta}>
-                            <Text style={styles.txtBtnAccionSecundarioText}>PEDIR CARTA</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity disabled={repartiendo} style={[styles.btnCasinoAccionPrincipal, repartiendo && { opacity: 0.5 }]} onPress={plantarse}>
-                            <Text style={styles.txtBtnAccionPrincipalText}>PLANTARSE</Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <>
-                          <TouchableOpacity style={styles.btnOtraPartidaVerde} onPress={iniciarPartidaBlackjack}>
-                            <Text style={styles.txtBtnOtraPartidaText}>NUEVA MANO</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity disabled={repartiendo} style={styles.btnSalirAlLobby} onPress={() => setVerTapete(false)}>
-                            <LogOut size={16} color="#fff" style={{ marginRight: 6 }} />
-                            <Text style={styles.txtBtnSalirLobbyText}>ABANDONAR MESA</Text>
-                          </TouchableOpacity>
-                        </>
-                      )}
-                    </View>
-
-                  </View>
-                )}
-
-              </View>
-            </ScrollView>
+            <Casino />
           )}
 
         </View>
@@ -903,46 +504,5 @@ const styles = StyleSheet.create({
   menuInferior: { flexDirection: 'row', backgroundColor: '#ffffff', borderTopWidth: 1, borderColor: '#E5E5EA', alignItems: 'center', paddingTop: 8 },
   btnTab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   txtTab: { color: '#8E8E93', fontSize: 11, fontWeight: '600', marginTop: 4 },
-  txtTabActivo: { color: '#5B3281' },
-
-  tableroCasinoPremium: { backgroundColor: '#1E3A1E', borderRadius: 16, borderWidth: 3, borderColor: '#451A60', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 5, width: '100%', overflow: 'hidden' },
-  cabeceraCasinoMesa: { flexDirection: 'row', backgroundColor: '#451A60', width: '100%', padding: 12, alignItems: 'center', justifyContent: 'space-between' },
-  txtMesaPremiumTitulo: { color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 1.2 },
-
-  lobbyCasinoCaja: { padding: 20, alignItems: 'center', justifyContent: 'center', width: '100%', backgroundColor: '#fff', gap: 14 },
-  lobbyCasinoTitulo: { fontSize: 18, fontWeight: 'bold', color: '#1C1C1E', marginTop: 4 },
-  lobbyCasinoSub: { fontSize: 12, color: '#666', textAlign: 'center', marginTop: 2, marginBottom: 4, lineHeight: 16 },
-  btnIniciarJuegoPremium: { backgroundColor: '#5B3281', paddingVertical: 12, paddingHorizontal: 28, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3 },
-  txtBtnJuegoText: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 },
-
-  cajaEstadisticasRachas: { backgroundColor: '#ffffff', width: '90%', borderRadius: 8, padding: 8, marginVertical: 6, borderWidth: 1, borderColor: '#E5E5EA', gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 1, elevation: 1 },
-  filaRachaStat: { flexDirection: 'row', alignItems: 'center', width: '100%', paddingHorizontal: 4 },
-  txtRachaStatLabel: { flex: 1, fontSize: 12, fontWeight: '600', color: '#555', marginLeft: 6 },
-  txtRachaStatValor: { fontSize: 14, fontWeight: '900', color: '#1C1C1E' },
-
-  zonaJugadorFila: { width: '100%', paddingVertical: 8, alignItems: 'center' },
-  txtMarcadorEtiqueta: { color: '#E2D5EE', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
-  badgePuntos: { backgroundColor: '#3A6B3A', paddingVertical: 3, paddingHorizontal: 10, borderRadius: 10 },
-  txtBadgePuntosText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-
-  filaCartasContenedor: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', minHeight: 85, alignItems: 'center', width: '100%', marginTop: 6 },
-  lineaMesaSeparador: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', width: '90%', alignSelf: 'center', marginVertical: 4, borderStyle: 'dashed', borderRadius: 1 },
-
-  cartaEstilo: { backgroundColor: '#fff', width: 56, height: 84, borderRadius: 6, justifyContent: 'space-between', padding: 5, marginHorizontal: 4, marginVertical: 4, borderWidth: 1, borderColor: '#BBB', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 3 },
-  textoCartaEsquina: { fontSize: 13, fontWeight: '900', lineHeight: 13 },
-  paloCartaEsquina: { fontSize: 11, lineHeight: 11, marginTop: 1 },
-  paloCartaCentral: { fontSize: 24, textAlign: 'center', alignSelf: 'center', marginVertical: -4 },
-
-  bannerResultadoFino: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 10, borderWidth: 1.5, marginVertical: 10, width: '100%' },
-  txtBannerResultadoText: { fontSize: 14, fontWeight: '800', textAlign: 'center', flex: 1 },
-
-  btnCasinoAccionSecundario: { backgroundColor: '#E5E5EA', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, flex: 1, alignItems: 'center', borderBottomWidth: 2, borderColor: '#CCC' },
-  txtBtnAccionSecundarioText: { color: '#1C1C1E', fontWeight: '900', fontSize: 13 },
-  btnCasinoAccionPrincipal: { backgroundColor: '#451A60', paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, flex: 1, alignItems: 'center', borderBottomWidth: 2, borderColor: '#290E3B' },
-  txtBtnAccionPrincipalText: { color: '#fff', fontWeight: '900', fontSize: 13 },
-
-  btnOtraPartidaVerde: { backgroundColor: '#10B981', paddingVertical: 14, width: '100%', borderRadius: 10, alignItems: 'center', borderBottomWidth: 2, borderColor: '#059669' },
-  txtBtnOtraPartidaText: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 },
-  btnSalirAlLobby: { flexDirection: 'row', backgroundColor: '#EF4444', paddingVertical: 12, width: '100%', borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderColor: '#DC2626' },
-  txtBtnSalirLobbyText: { color: '#fff', fontWeight: '800', fontSize: 13 }
+  txtTabActivo: { color: '#5B3281' }
 });
