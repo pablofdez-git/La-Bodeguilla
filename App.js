@@ -256,7 +256,7 @@ function ContenidoApp() {
   };
 
   // ==========================================
-  //      LÓGICA DEL BLACKJACK CORREGIDA
+  //      LÓGICA DEL BLACKJACK PERFECCIONADA
   // ==========================================
   const inicializarBaraja = () => {
     const palos = ['♦', '♣', '♥', '♠'];
@@ -372,15 +372,15 @@ function ContenidoApp() {
 
     let mazoCopia = [...baraja];
     let manoC = [...manoCrupier];
-    let puntosJ = calcularPuntos(manoJugador);
-    let puntosC = calcularPuntos(manoC);
 
     const ejecutarTurnoCrupier = () => {
-      // IA Corregida: solo pide si tiene menos de 17 Y va perdiendo contra el jugador
-      if (puntosC < 17 && puntosC < puntosJ) {
+      let puntosJ = calcularPuntos(manoJugador);
+      let puntosC = calcularPuntos(manoC);
+
+      // 🛠️ IA ARREGLADA CON AS DINÁMICO: Pide si tiene menos de 17, o si va por detrás de tus puntos y no se ha pasado
+      if (puntosC < 17 || (puntosC < puntosJ && puntosC <= 21)) {
         const nuevaCarta = mazoCopia.pop();
         manoC.push(nuevaCarta);
-        puntosC = calcularPuntos(manoC);
         setManoCrupier([...manoC]);
         setBaraja(mazoCopia);
         setTimeout(ejecutarTurnoCrupier, 600);
@@ -580,7 +580,7 @@ function ContenidoApp() {
                 </View>
                 <Text style={styles.labelForm}>Stock Mínimo:</Text>
                 <TextInput style={styles.input} placeholder="Ej: 2" placeholderTextColor="#999" keyboardType="numeric" value={nuevoProdMinimo} onChangeText={setNuevoProdMinimo} />
-                <TouchableOpacity style={[styles.btnAñadirExtra, { backgroundColor: '#34C759', marginTop: 8 }]} onPress={registrarNuevoProductoInventario}><Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>REGISTRAR EN BASE DE DATOS</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.btnAñadirExtra, { backgroundColor: '#34C759', marginTop: 8 }]} onPress={registrarNuevoProductoInventario}><Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>REGISTRAR</Text></TouchableOpacity>
               </View>
               <View style={styles.bloqueTienda}>
                 <Text style={styles.tituloTienda}>ELIMINAR ARTÍCULOS EXISTENTES</Text>
@@ -603,7 +603,6 @@ function ContenidoApp() {
             <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 12 }}>
               <View style={styles.tableroCasinoPremium}>
 
-                {/* Cabecera del tapete - Nombre general del Casino[cite: 4] */}
                 <View style={styles.cabeceraCasinoMesa}>
                   <Dices size={20} color="#fff" />
                   <Text style={styles.txtMesaPremiumTitulo}>CASINO LA BODEGUILLA</Text>
@@ -611,19 +610,13 @@ function ContenidoApp() {
                 </View>
 
                 {!verTapete ? (
-                  // ==========================================
-                  //      LOBBY PRINCIPAL: MENÚ DE SELECCIÓN[cite: 4]
-                  // ==========================================
                   <View style={styles.lobbyCasinoCaja}>
-
-                    {/* SECTOR 1: BOTÓN / TARJETA DEL BLACKJACK[cite: 4] */}
                     <View style={{ width: '100%', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 12, padding: 16, backgroundColor: '#F4F4F6', alignItems: 'center' }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                         <Layers size={22} color="#5B3281" />
                         <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1C1C1E' }}>BLACK JACK</Text>
                       </View>
 
-                      {/* 🔥 LAS RACHAS REUBICADAS AQUÍ DENTRO: Pertenecen exclusivamente al Blackjack[cite: 4] */}
                       <View style={styles.cajaEstadisticasRachas}>
                         <View style={styles.filaRachaStat}>
                           <Flame size={15} color="#EAB308" />
@@ -645,26 +638,9 @@ function ContenidoApp() {
                         <Text style={styles.txtBtnJuegoText}>JUGAR AHORA</Text>
                       </TouchableOpacity>
                     </View>
-
-                    {/* 💡 EL DÍA DE MAÑANA EL SIGUIENTE JUEGO CAERÁ AQUÍ ABAJO Y LA CAJA MORADA SE AGRANDARÁ SOLA */}
-                    {/*
-                    <View style={{ width: '100%', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 12, padding: 16, backgroundColor: '#F4F4F6', alignItems: 'center', marginTop: 12 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                        <Dices size={22} color="#5B3281" />
-                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1C1C1E' }}>RULETA</Text>
-                      </View>
-                      ...
-                    </View>
-                    */}
-
                   </View>
                 ) : (
-                  // ==========================================
-                  //         TAPETE ACTIVO DE JUEGO[cite: 4]
-                  // ==========================================
                   <View style={{ width: '100%', padding: 14 }}>
-
-                    {/* CRUPIER[cite: 4] */}
                     <View style={styles.zonaJugadorFila}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, width: '100%', paddingHorizontal: 4 }}>
                         <Text style={styles.txtMarcadorEtiqueta}>CRUPIER BANCA</Text>
@@ -677,7 +653,6 @@ function ContenidoApp() {
                       </View>
                     </View>
 
-                    {/* SEPARADOR DE MESA CON CONTADOR DE RACHA EN VIVO[cite: 4] */}
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginVertical: 4 }}>
                       <View style={[styles.lineaMesaSeparador, { width: '30%', marginVertical: 0 }]} />
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(91,50,129,0.4)', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10 }}>
@@ -687,7 +662,6 @@ function ContenidoApp() {
                       <View style={[styles.lineaMesaSeparador, { width: '30%', marginVertical: 0 }]} />
                     </View>
 
-                    {/* JUGADOR[cite: 4] */}
                     <View style={styles.zonaJugadorFila}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, width: '100%', paddingHorizontal: 4 }}>
                         <Text style={styles.txtMarcadorEtiqueta}>TU MANO</Text>
@@ -700,7 +674,6 @@ function ContenidoApp() {
                       </View>
                     </View>
 
-                    {/* BANNER DE RESULTADO[cite: 4] */}
                     {mensajeResultado ? (
                       <View style={[
                         styles.bannerResultadoFino,
@@ -720,7 +693,6 @@ function ContenidoApp() {
                       </View>
                     ) : null}
 
-                    {/* BOTONES INTERACTIVOS[cite: 4] */}
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 }}>
                       {enPartida ? (
                         <>
@@ -850,9 +822,6 @@ const styles = StyleSheet.create({
   txtTab: { color: '#8E8E93', fontSize: 11, fontWeight: '600', marginTop: 4 },
   txtTabActivo: { color: '#5B3281' },
 
-  // ==========================================
-  //         DISEÑO CASINO PRESTIGE[cite: 4]
-  // ==========================================
   tableroCasinoPremium: { backgroundColor: '#1E3A1E', borderRadius: 16, borderWidth: 3, borderColor: '#451A60', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 5, width: '100%', overflow: 'hidden' },
   cabeceraCasinoMesa: { flexDirection: 'row', backgroundColor: '#451A60', width: '100%', padding: 12, alignItems: 'center', justifyContent: 'space-between' },
   txtMesaPremiumTitulo: { color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 1.2 },
