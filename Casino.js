@@ -3,6 +3,9 @@ import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Image } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Dices, Gamepad, Layers, Flame, Trophy, Minus, Plus, LogOut, AlertTriangle, RefreshCw } from 'lucide-react-native';
 
+// Ampliamos el array a 9 símbolos para diluir la probabilidad y subir la dificultad real
+const SIMBOLOS_SLOTS = ['🍺', '🍷', '🥩', '💵', '💎', '🃏', '🔊', '🧊', '🥪'];
+
 const NUMEROS_RULETA = [
   { n: 0, color: 'verde' },
   { n: 1, color: 'rojo' }, { n: 2, color: 'negro' }, { n: 3, color: 'rojo' },
@@ -78,6 +81,13 @@ export default function Casino() {
   const [mostrarOverlayRuleta, setMostrarOverlayRuleta] = useState(false);
   const [textoOverlayRuleta, setTextoOverlayRuleta] = useState('');
   const [colorOverlayFondo, setColorOverlayFondo] = useState('rgba(0,0,0,0.8)');
+
+  // Estados de la Máquina Tragaperras
+  const [slots, setSlots] = useState(['🍺', '🍷', '🥩']);
+  const [girandoSlots, setGirandoSlots] = useState(false);
+  const [apuestaSlots, setApuestaSlots] = useState(20);
+  const [mensajeSlots, setMensajeSlots] = useState('');
+  const [resultadoTipoSlots, setResultadoTipoSlots] = useState('');
 
   useEffect(() => {
     cargarDatosCasinoLocal();
@@ -380,6 +390,72 @@ export default function Casino() {
     setColorGanadorRuleta('#451A60');
   };
 
+  // Lógica de las Tragaperras
+  const jugarTragaperras = () => {
+    if (monedas < apuestaSlots) {
+      Alert.alert('Falta saldo', 'No tienes suficientes monedas para jugar.');
+      return;
+    }
+    setGirandoSlots(true);
+    setMensajeSlots('');
+    setResultadoTipoSlots('');
+
+    let saldoResta = monedas - apuestaSlots;
+    setMonedas(saldoResta);
+    guardarDatoCasinoLocal('@bj_monedas', saldoResta);
+
+    let iteracion = 0;
+    const intervalo = setInterval(() => {
+      setSlots([
+        SIMBOLOS_SLOTS[Math.floor(Math.random() * SIMBOLOS_SLOTS.length)],
+        SIMBOLOS_SLOTS[Math.floor(Math.random() * SIMBOLOS_SLOTS.length)],
+        SIMBOLOS_SLOTS[Math.floor(Math.random() * SIMBOLOS_SLOTS.length)],
+      ]);
+      iteracion++;
+
+      if (iteracion > 15) {
+        clearInterval(intervalo);
+
+        const finalSlots = [
+          SIMBOLOS_SLOTS[Math.floor(Math.random() * SIMBOLOS_SLOTS.length)],
+          SIMBOLOS_SLOTS[Math.floor(Math.random() * SIMBOLOS_SLOTS.length)],
+          SIMBOLOS_SLOTS[Math.floor(Math.random() * SIMBOLOS_SLOTS.length)],
+        ];
+        setSlots(finalSlots);
+        const bola = finalSlots[0];
+
+        let balancePremios = 0;
+
+        // Comprobar combinaciones con la nueva dificultad diluida
+        if (finalSlots[0] === finalSlots[1] && finalSlots[1] === finalSlots[2]) {
+          // 3 Iguales: Premio Gordo
+          if (bola === '💎') balancePremios += apuestaSlots * 60;
+          else if (bola === '💵') balancePremios += apuestaSlots * 40;
+          else if (bola === '🥩' || bola === '🥪') balancePremios += apuestaSlots * 25;
+          else balancePremios += apuestaSlots * 15;
+        } else if (finalSlots[0] === finalSlots[1] || finalSlots[1] === finalSlots[2] || finalSlots[0] === finalSlots[2]) {
+          // 2 Iguales: Reintegro / Premio Menor
+          balancePremios += Math.floor(apuestaSlots * 2);
+        }
+
+        const saldoFinalCasino = monedas + balancePremios;
+        setMonedas(saldoFinalCasino);
+        guardarDatoCasinoLocal('@bj_monedas', saldoFinalCasino);
+
+        if (balancePremios > 0) {
+          setResultadoTipoSlots('ganado');
+          setMensajeSlots(`🎉 ¡PREMIO! +${balancePremios} monedas`);
+        } else {
+          setResultadoTipoSlots('perdido');
+          setMensajeSlots('❌ Sin premio. ¡Dale otra vez!');
+          verificarAuxilioBancarrota(saldoResta);
+        }
+
+        setGirandoSlots(false);
+      }
+    }, 100);
+  };
+
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
       <View style={styles.tableroCasinoPremium}>
@@ -422,6 +498,15 @@ export default function Casino() {
                 <Text style={styles.txtTituloTarjetaJuego}>RULETA EUROPEA</Text>
               </View>
               <Text style={[styles.txtMiniRachaText, { color: '#8E8E93', marginTop: 4, marginLeft: 36 }]}>Tapete Táctil Premium</Text>
+            </TouchableOpacity>
+
+            {/* Tarjeta Rectangular 3: Tragaperras */}
+            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => setJuegoSeleccionado('tragaperras')}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Gamepad size={26} color="#b45309" />
+                <Text style={styles.txtTituloTarjetaJuego}>TRAGAPERRAS LA PEÑA</Text>
+              </View>
+              <Text style={[styles.txtMiniRachaText, { color: '#8E8E93', marginTop: 4, marginLeft: 36 }]}>Prueba tu suerte con los cubatas</Text>
             </TouchableOpacity>
 
           </View>
@@ -621,6 +706,68 @@ export default function Casino() {
           </View>
         )}
 
+        {/* JUEGO 3: TRAGAPERRAS LA PEÑA AMBIENTADA */}
+        {juegoSeleccionado === 'tragaperras' && (
+          <View style={styles.contenedorMesaFondoVerdeReal}>
+
+            {/* Chasis de Máquina Recreativa Vintage */}
+            <View style={styles.chasisTragaperrasMueble}>
+              <View style={styles.marquesinaLuminosa}>
+                <Text style={styles.txtMarquesinaTitulo}>CUBATAS JACKPOT</Text>
+              </View>
+
+              {/* Ventana de Rodillos con Estilo Neon */}
+              <View style={styles.pantallaRodillosNeon}>
+                <View style={styles.contenedorRodillosRow}>
+                  <View style={styles.cajaRodilloFisico}><Text style={styles.txtEmojiRodillo}>{slots[0]}</Text></View>
+                  <View style={styles.cajaRodilloFisico}><Text style={styles.txtEmojiRodillo}>{slots[1]}</Text></View>
+                  <View style={styles.cajaRodilloFisico}><Text style={styles.txtEmojiRodillo}>{slots[2]}</Text></View>
+                </View>
+              </View>
+
+              {/* Minipantalla de pagos integrada en el mueble con la nueva distribución */}
+              <View style={styles.tablaPagosMueble}>
+                <Text style={styles.txtTablaPagosTitulo}>PREMIOS TOP (3 IGUALES):</Text>
+                <Text style={styles.txtTablaPagosLinea}>💎 x60 | 💵 x40 | 🥩 x25 | 🥪 x25</Text>
+                <Text style={styles.txtTablaPagosMiniNota}>¡Ojo! Hay 9 símbolos. Sacar 2 iguales paga x2</Text>
+              </View>
+            </View>
+
+            {/* Banner de Ganancia Fijo */}
+            <View style={[
+              styles.bannerResultadoFino,
+              {
+                backgroundColor: mensajeSlots ? (resultadoTipoSlots === 'ganado' ? '#DEF7EC' : '#FDE8E8') : 'transparent',
+                borderColor: mensajeSlots ? (resultadoTipoSlots === 'ganado' ? '#34C759' : '#FF3B30') : 'transparent',
+                marginVertical: 10
+              }
+            ]}><Text style={[
+                styles.txtBannerResultadoText,
+                { color: mensajeSlots ? (resultadoTipoSlots === 'ganado' ? '#1E4620' : '#6B1D1D') : 'transparent' }
+              ]}>{mensajeSlots || ' '}</Text></View>
+
+            {/* Selector de Apuestas */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 10, gap: 12 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Apuesta:</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E5E5EA', borderRadius: 8 }}>
+                <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaSlots(a => Math.max(10, a - 10))}><Minus size={14} color="#000" /></TouchableOpacity>
+                <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: 'bold', color: '#000' }}>{apuestaSlots}</Text>
+                <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaSlots(a => Math.min(LIMITE_APUESTA_MAX, monedas, a + 10))}><Plus size={14} color="#000" /></TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Botonera de la máquina */}
+            <View style={{ gap: 6, paddingBottom: 4 }}>
+              <TouchableOpacity disabled={girandoSlots} style={styles.btnOtraPartidaVerde} onPress={jugarTragaperras}>
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>{girandoSlots ? 'GIRANDO...' : 'TIRAR PALANCA'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity disabled={girandoSlots} style={styles.btnSalirAlLobby} onPress={() => { setJuegoSeleccionado(null); setMensajeSlots(''); }}>
+                <Text style={{ fontSize: 12, color: '#fff', fontWeight: 'bold' }}>SALIR AL MENÚ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
       </View>
     </ScrollView>
   );
@@ -690,5 +837,18 @@ const styles = StyleSheet.create({
   circuloResultadoRuletaGrande: { justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#FEF08A', marginBottom: 16 },
   txtOverlayNumeroGigante: { color: '#fff', fontSize: 42, fontWeight: '900' },
   txtOverlayMensajePremio: { color: '#fff', fontSize: 20, fontWeight: '900', textAlign: 'center', lineHeight: 28 },
-  txtOverlaySubtituloToque: { color: '#8E8E93', fontSize: 11, fontWeight: '600', marginTop: 20, textTransform: 'uppercase', letterSpacing: 1 }
+  txtOverlaySubtituloToque: { color: '#8E8E93', fontSize: 11, fontWeight: '600', marginTop: 20, textTransform: 'uppercase', letterSpacing: 1 },
+
+  // Estilos Mueble Slot Machine Vintage
+  chasisTragaperrasMueble: { width: '100%', backgroundColor: '#2D3748', borderRadius: 16, padding: 12, borderWidth: 4, borderColor: '#1A202C', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 8 },
+  marquesinaLuminosa: { width: '100%', backgroundColor: '#4C1D95', paddingVertical: 8, alignItems: 'center', borderRadius: 8, borderWidth: 2, borderColor: '#FEF08A', marginBottom: 12 },
+  txtMarquesinaTitulo: { color: '#FEF08A', fontWeight: '900', fontSize: 16, letterSpacing: 2, textShadowColor: 'rgba(254, 240, 138, 0.5)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 },
+  pantallaRodillosNeon: { width: '100%', backgroundColor: '#111827', borderRadius: 10, padding: 14, borderWidth: 3, borderColor: '#EAB308', shadowColor: '#EAB308', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
+  contenedorRodillosRow: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
+  cajaRodilloFisico: { width: 72, height: 85, backgroundColor: '#FFFBEB', borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#78350F' },
+  txtEmojiRodillo: { fontSize: 38 },
+  tablaPagosMueble: { width: '100%', backgroundColor: '#1F2937', padding: 8, borderRadius: 6, marginTop: 10, alignItems: 'center', borderWidth: 1, borderColor: '#4B5563' },
+  txtTablaPagosTitulo: { color: '#EAB308', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  txtTablaPagosLinea: { color: '#F3F4F6', fontSize: 10, fontWeight: '700', marginTop: 2 },
+  txtTablaPagosMiniNota: { color: '#9CA3AF', fontSize: 9, fontWeight: '500', marginTop: 2, fontStyle: 'italic' }
 });
