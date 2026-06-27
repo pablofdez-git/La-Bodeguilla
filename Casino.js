@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Image, Modal } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Image, Modal, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Dices, Gamepad, Layers, Flame, Trophy, Minus, Plus, LogOut, AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { registrarOObtenerJugador, sincronizarJugador, obtenerRanking } from './supabaseService';
+import { Dices, Gamepad, Layers, Flame, Trophy, Minus, Plus, LogOut, AlertTriangle, RefreshCw, Users, Star } from 'lucide-react-native';
 
 const AYUDA_TEXTOS = {
   blackjack: {
@@ -274,23 +275,82 @@ export default function Casino() {
   const [warAnimando, setWarAnimando] = useState(false);
 
   // Modal de ayuda
-  const [modalAyuda, setModalAyuda] = useState(null); // null | 'blackjack' | 'ruleta' | 'tragaperras' | 'dados' | 'rasca'
+  const [modalAyuda, setModalAyuda] = useState(null);
 
+  // ── Perfil y Ranking ────────────────────────────────────────────────────────
+  const [pantallaActiva, setPantallaActiva] = useState('cargando'); // 'cargando' | 'registro' | 'juego' | 'ranking'
+  const [nombreJugador, setNombreJugador] = useState('');
+  const [inputNombre, setInputNombre] = useState('');
+  const [bancarrotas, setBancarrotas] = useState(0);
+  const [ranking, setRanking] = useState([]);
+  const [cargandoRanking, setCargandoRanking] = useState(false);
+  const [registrando, setRegistrando] = useState(false);
+  const [errorRegistro, setErrorRegistro] = useState('');
+
+  // Al montar: comprueba si ya hay nombre guardado localmente
   useEffect(() => {
-    cargarDatosCasinoLocal();
+    const init = async () => {
+      try {
+        const nombre = await AsyncStorage.getItem('@casino_nombre');
+        const banca  = await AsyncStorage.getItem('@casino_bancarrotas');
+        const monCachadas = await AsyncStorage.getItem('@bj_monedas');
+        if (nombre) {
+          setNombreJugador(nombre);
+          if (banca) setBancarrotas(parseInt(banca, 10));
+          if (monCachadas) setMonedas(parseInt(monCachadas, 10));
+          setPantallaActiva('juego');
+        } else {
+          setPantallaActiva('registro');
+        }
+      } catch (_) {
+        setPantallaActiva('registro');
+      }
+    };
+    init();
   }, []);
 
-  const cargarDatosCasinoLocal = async () => {
-    try {
-      const localRacha = await AsyncStorage.getItem('@bj_racha_actual');
-      const localMaxRacha = await AsyncStorage.getItem('@bj_racha_maxima');
-      const localMonedas = await AsyncStorage.getItem('@bj_monedas');
+  // Sincroniza con Supabase cada vez que cambian monedas o bancarrotas
+  useEffect(() => {
+    if (!nombreJugador || pantallaActiva === 'cargando' || pantallaActiva === 'registro') return;
+    sincronizarJugador({ nombre: nombreJugador, monedas, bancarrotas })
+      .catch(e => console.warn('Sync error:', e));
+  }, [monedas, bancarrotas]);
 
-      if (localRacha !== null) setRachaActual(parseInt(localRacha, 10));
-      if (localMaxRacha !== null) setRachaMaxima(parseInt(localMaxRacha, 10));
-      if (localMonedas !== null) setMonedas(parseInt(localMonedas, 10));
-    } catch (e) {
-      console.error('Error cargando datos locales del casino', e);
+  const confirmarNombre = async () => {
+    const nombre = inputNombre.trim();
+    if (!nombre) { setErrorRegistro('Escribe tu nombre.'); return; }
+    if (nombre.length < 2) { setErrorRegistro('Al menos 2 caracteres.'); return; }
+    if (nombre.length > 20) { setErrorRegistro('Máximo 20 caracteres.'); return; }
+    setRegistrando(true);
+    setErrorRegistro('');
+    const { ok, jugador, error } = await registrarOObtenerJugador(nombre);
+    if (!ok) {
+      setErrorRegistro('Error de conexión. Inténtalo de nuevo.');
+      setRegistrando(false);
+      return;
+    }
+    // Si el jugador ya existía en Supabase, cargamos sus monedas y bancarrotas
+    const m = jugador.monedas ?? 500;
+    const b = jugador.bancarrotas ?? 0;
+    setNombreJugador(nombre);
+    setMonedas(m);
+    setBancarrotas(b);
+    await AsyncStorage.setItem('@casino_nombre', nombre);
+    await AsyncStorage.setItem('@casino_bancarrotas', b.toString());
+    await AsyncStorage.setItem('@bj_monedas', m.toString());
+    setRegistrando(false);
+    setPantallaActiva('juego');
+  };
+
+  const cargarRanking = async () => {
+    setCargandoRanking(true);
+    try {
+      const data = await obtenerRanking();
+      setRanking(data || []);
+    } catch (_) {
+      Alert.alert('Error', 'No se pudo cargar el ranking.');
+    } finally {
+      setCargandoRanking(false);
     }
   };
 
@@ -301,10 +361,13 @@ export default function Casino() {
   const verificarAuxilioBancarrota = (saldoActual, esManoBJ = false) => {
     if (saldoActual <= 0) {
       const saldoAuxilio = 50;
+      const nuevasBancarrotas = bancarrotas + 1;
       setMonedas(saldoAuxilio);
+      setBancarrotas(nuevasBancarrotas);
       guardarDatoCasinoLocal('@bj_monedas', saldoAuxilio);
+      guardarDatoCasinoLocal('@casino_bancarrotas', nuevasBancarrotas);
       if (esManoBJ) setApuestaActual(50);
-      Alert.alert('Bancarrota', 'Has perdido todo. Se te asignan 50 monedas de penalización para poder reengancharte.');
+      Alert.alert('💸 Bancarrota', `Has perdido todo. Se te asignan 50 monedas para reengancharte.\nBancarrotas totales: ${nuevasBancarrotas}`);
       return saldoAuxilio;
     }
     return saldoActual;
@@ -738,7 +801,8 @@ export default function Casino() {
   };
 
   // ─── LÓGICA RASCA Y GANA ─────────────────────────────────────────────────────
-  const SIMBOLOS_RASCA = ['🍺', '🍷', '🥩', '💎', '💵', '🃏'];
+  // 9 símbolos para que sea mucho más difícil hacer pares/tríos al azar
+  const SIMBOLOS_RASCA = ['🍺', '🍷', '🥩', '💎', '💵', '🃏', '🎯', '🍋', '🔔'];
 
   const comprarRasca = () => {
     if (monedas < rascaApuesta) {
@@ -749,41 +813,38 @@ export default function Casino() {
     setMonedas(saldoResta);
     guardarDatoCasinoLocal('@bj_monedas', saldoResta);
 
-    // Generar las 6 casillas con resultado predeterminado (para que el premio sea coherente)
-    // Decidir resultado de antemano para control de probabilidad
     const rand = Math.random();
     let simbolos;
-    if (rand < 0.04) {
-      // ~4%: premio gordo — 3 símbolos iguales en posiciones 0,1,2 (o spread)
-      const s = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
-      const resto = Array.from({ length: 3 }, () => SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)]);
-      simbolos = [s, s, s, ...resto];
-    } else if (rand < 0.30) {
-      // ~26%: premio pequeño — exactamente 2 iguales
-      const s = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
-      const resto = Array.from({ length: 4 }, () => {
-        let r;
-        do { r = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)]; } while (r === s);
-        return r;
-      });
-      simbolos = [s, s, ...resto];
-    } else {
-      // ~70%: sin premio — todos diferentes o sin pares entre las primeras 3
-      simbolos = Array.from({ length: 6 }, () => SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)]);
-      // Forzar que no haya 3 iguales ni 2 entre [0,1,2]
-      for (let i = 0; i < 6; i++) {
-        let intentos = 0;
-        while (
-          (simbolos.filter((s, idx) => idx !== i && s === simbolos[i]).length >= 2) ||
-          (i < 3 && simbolos.indexOf(simbolos[i]) !== i && simbolos.indexOf(simbolos[i]) < 3)
-        ) {
-          simbolos[i] = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
-          if (++intentos > 20) break;
-        }
+
+    if (rand < 0.02) {
+      // 2% — trifecta: un símbolo aparece exactamente 3 veces, los otros 3 son distintos entre sí y distintos al ganador
+      const ganador = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
+      const resto = SIMBOLOS_RASCA.filter(s => s !== ganador);
+      // Mezclar resto y coger 3 distintos
+      for (let i = resto.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [resto[i], resto[j]] = [resto[j], resto[i]];
       }
+      simbolos = [ganador, ganador, ganador, resto[0], resto[1], resto[2]];
+
+    } else if (rand < 0.20) {
+      // 18% — par exacto: un símbolo aparece exactamente 2 veces, los otros 4 son todos distintos entre sí y distintos al ganador
+      const ganador = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
+      const resto = SIMBOLOS_RASCA.filter(s => s !== ganador);
+      for (let i = resto.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [resto[i], resto[j]] = [resto[j], resto[i]];
+      }
+      // 4 distintos del resto (hay 8 disponibles, cogemos los 4 primeros tras mezclar)
+      simbolos = [ganador, ganador, resto[0], resto[1], resto[2], resto[3]];
+
+    } else {
+      // 80% — sin premio: 6 símbolos todos distintos entre sí (imposible par ni trío)
+      const mezclados = [...SIMBOLOS_RASCA].sort(() => Math.random() - 0.5);
+      simbolos = mezclados.slice(0, 6); // 9 símbolos → cogemos 6 distintos, garantizado sin par
     }
 
-    // Mezclar posiciones
+    // Mezclar posiciones para que el par/trío no siempre esté al principio
     for (let i = simbolos.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [simbolos[i], simbolos[j]] = [simbolos[j], simbolos[i]];
@@ -994,22 +1055,176 @@ export default function Casino() {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} style={{ backgroundColor: '#0F1923' }}>
-      <View style={styles.tableroCasinoPremium}>
+    <View style={{ flex: 1, backgroundColor: '#0F1923' }}>
 
-        <ModalAyuda juego={modalAyuda} onCerrar={() => setModalAyuda(null)} />
 
-        {/* HUD Superior de Monedas global */}
-        <View style={styles.cabeceraCasinoMesa}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-            <Dices size={18} color="#FEF08A" />
-            <Text style={styles.txtMesaPremiumTitulo}>LA BODEGUILLA</Text>
-          </View>
-          <View style={styles.hudMonedasPill}>
-            <Text style={{ color: '#FEF08A', fontSize: 13 }}>🪙</Text>
-            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14, marginLeft: 5 }}>{monedas}</Text>
-          </View>
+      {/* ── PANTALLA CARGANDO ──────────────────────────────────────────────── */}
+      {pantallaActiva === 'cargando' && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 }}>
+          <ActivityIndicator color="#FEF08A" size="large" />
+          <Text style={{ color: '#6B7280', fontSize: 13, fontWeight: '600' }}>Cargando...</Text>
         </View>
+      )}
+
+      {/* ── PANTALLA REGISTRO (primer arranque) ───────────────────────────── */}
+      {pantallaActiva === 'registro' && (
+        <KeyboardAvoidingView
+          style={{ flex: 1, backgroundColor: '#0F1923' }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 80}
+        >
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, padding: 28, paddingTop: 60, paddingBottom: 80 }}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+          <View style={{ alignItems: 'center', marginBottom: 40 }}>
+            <Text style={{ fontSize: 52, marginBottom: 12 }}>🎰</Text>
+            <Text style={{ color: '#fff', fontSize: 26, fontWeight: '900', letterSpacing: 3, marginBottom: 6 }}>LA BODEGUILLA</Text>
+            <Text style={{ color: '#6B7280', fontSize: 13, fontWeight: '600', letterSpacing: 1 }}>CASINO DEL PUEBLO</Text>
+          </View>
+
+          <View style={{ backgroundColor: '#1C1130', borderRadius: 16, padding: 22, borderWidth: 1, borderColor: 'rgba(124,58,237,0.4)', gap: 16 }}>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900', textAlign: 'center' }}>¿CÓMO TE LLAMAS?</Text>
+            <Text style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
+              Tu nombre se guarda en este dispositivo y en el ranking compartido. No podrás cambiarlo después.
+            </Text>
+
+            <TextInput
+              style={{ backgroundColor: 'rgba(0,0,0,0.4)', borderWidth: 1.5, borderColor: errorRegistro ? '#EF4444' : 'rgba(124,58,237,0.5)', borderRadius: 12, padding: 14, color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center' }}
+              placeholder="Nombre..."
+              placeholderTextColor="#4B5563"
+              value={inputNombre}
+              onChangeText={t => { setInputNombre(t); setErrorRegistro(''); }}
+              maxLength={20}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={confirmarNombre}
+            />
+
+            {errorRegistro ? (
+              <Text style={{ color: '#F87171', fontSize: 12, fontWeight: '700', textAlign: 'center' }}>{errorRegistro}</Text>
+            ) : null}
+
+            <TouchableOpacity
+              disabled={registrando}
+              onPress={confirmarNombre}
+              style={{ backgroundColor: '#7C3AED', borderRadius: 12, paddingVertical: 15, alignItems: 'center', borderBottomWidth: 3, borderColor: '#5B21B6', opacity: registrando ? 0.7 : 1 }}
+            >
+              {registrando
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 1 }}>ENTRAR AL CASINO →</Text>}
+            </TouchableOpacity>
+          </View>
+
+          <Text style={{ color: '#374151', fontSize: 11, textAlign: 'center', marginTop: 20 }}>
+            Empiezas con 500 monedas · Gratis · Sin trampas (bueno...)
+          </Text>
+        </ScrollView>
+        </KeyboardAvoidingView>
+      )}
+
+      {/* ── PANTALLA RANKING ───────────────────────────────────────────────── */}
+      {pantallaActiva === 'ranking' && (
+        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 48 }} style={{ backgroundColor: '#0F1923' }}>
+          {/* Cabecera */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 28, gap: 10 }}>
+            <TouchableOpacity onPress={() => setPantallaActiva('juego')} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.06)', justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '300' }}>‹</Text>
+            </TouchableOpacity>
+            <Trophy size={20} color="#FEF08A" />
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', letterSpacing: 2, flex: 1 }}>RANKING</Text>
+            <TouchableOpacity onPress={cargarRanking} style={{ padding: 8 }}>
+              <RefreshCw size={16} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Leyenda fórmula */}
+          <View style={{ backgroundColor: 'rgba(254,240,138,0.06)', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: 'rgba(254,240,138,0.15)', marginBottom: 20 }}>
+            <Text style={{ color: '#FEF08A', fontSize: 11, fontWeight: '700', textAlign: 'center', letterSpacing: 0.5 }}>
+              Puntos = monedas × (1 − bancarrotas × 0.08) · mínimo ×0.2
+            </Text>
+          </View>
+
+          {cargandoRanking ? (
+            <ActivityIndicator color="#FEF08A" size="large" style={{ marginTop: 40 }} />
+          ) : (
+            <View style={{ gap: 8 }}>
+              {ranking.map((j, idx) => {
+                const medalla = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null;
+                const esTu = j.nombre === nombreJugador;
+                return (
+                  <View key={j.nombre} style={{
+                    backgroundColor: esTu ? 'rgba(124,58,237,0.18)' : '#1C1130',
+                    borderRadius: 12, padding: 14, borderWidth: 1,
+                    borderColor: esTu ? 'rgba(124,58,237,0.7)' : idx < 3 ? 'rgba(254,240,138,0.2)' : 'rgba(91,50,129,0.3)',
+                    flexDirection: 'row', alignItems: 'center', gap: 12,
+                  }}>
+                    {/* Posición */}
+                    <View style={{ width: 34, alignItems: 'center' }}>
+                      {medalla
+                        ? <Text style={{ fontSize: 22 }}>{medalla}</Text>
+                        : <Text style={{ color: '#6B7280', fontWeight: '900', fontSize: 14 }}>#{idx + 1}</Text>}
+                    </View>
+
+                    {/* Nombre */}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15 }}>
+                        {j.nombre}{esTu ? ' 👈' : ''}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                        <Text style={{ color: '#9CA3AF', fontSize: 11, fontWeight: '600' }}>🪙 {j.monedas}</Text>
+                        {j.bancarrotas > 0 && (
+                          <Text style={{ color: '#F87171', fontSize: 11, fontWeight: '600' }}>💸 ×{j.bancarrotas}</Text>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Puntuación */}
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={{ color: '#FEF08A', fontWeight: '900', fontSize: 18 }}>{j.puntuacion}</Text>
+                      <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '600' }}>pts</Text>
+                    </View>
+                  </View>
+                );
+              })}
+
+              {ranking.length === 0 && (
+                <View style={{ alignItems: 'center', paddingVertical: 50 }}>
+                  <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
+                    Aún no hay nadie en el ranking.{'\n'}¡Sé el primero en jugar!
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </ScrollView>
+      )}
+
+      {/* ── PANTALLA DE JUEGO ──────────────────────────────────────────────── */}
+      {pantallaActiva === 'juego' && (
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} style={{ backgroundColor: '#0F1923' }}>
+          <View style={styles.tableroCasinoPremium}>
+
+            <ModalAyuda juego={modalAyuda} onCerrar={() => setModalAyuda(null)} />
+
+            {/* HUD Superior */}
+            <View style={styles.cabeceraCasinoMesa}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                <Dices size={18} color="#FEF08A" />
+                <Text style={styles.txtMesaPremiumTitulo}>LA BODEGUILLA</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity onPress={() => { cargarRanking(); setPantallaActiva('ranking'); }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(254,240,138,0.08)', borderWidth: 1, borderColor: 'rgba(254,240,138,0.2)', justifyContent: 'center', alignItems: 'center' }}>
+                  <Trophy size={14} color="#FEF08A" />
+                </TouchableOpacity>
+                <View style={styles.hudMonedasPill}>
+                  <Text style={{ color: '#C4B5FD', fontWeight: '700', fontSize: 11, marginRight: 5 }}>{nombreJugador}</Text>
+                  <Text style={{ color: '#FEF08A', fontSize: 13 }}>🪙</Text>
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14, marginLeft: 4 }}>{monedas}</Text>
+                </View>
+              </View>
+            </View>
 
         {/* LOBBY INICIAL CON FILAS RECTANGULARES VERTICALES COMPACTAS */}
         {juegoSeleccionado === null && (
@@ -1493,7 +1708,7 @@ export default function Casino() {
                 <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', alignItems: 'center', width: '100%' }}>
                   <Text style={{ fontSize: 42, marginBottom: 8 }}>🎟️</Text>
                   <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15, marginBottom: 4 }}>CARTÓN LA BODEGUILLA</Text>
-                  <Text style={{ color: '#9CA3AF', fontSize: 11, textAlign: 'center', lineHeight: 17 }}>6 casillas ocultas · 3 iguales hasta x50{'\n'}Par x2 · 💎×3 paga x50 · 💵×3 paga x30</Text>
+                  <Text style={{ color: '#9CA3AF', fontSize: 11, textAlign: 'center', lineHeight: 17 }}>9 símbolos · 6 casillas · Par x2{'\n'}💎×3 paga x50 · 💵×3 paga x30 · resto ×3 paga x15</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={{ fontSize: 13, fontWeight: '700', color: '#9CA3AF' }}>Precio:</Text>
@@ -1588,8 +1803,8 @@ export default function Casino() {
               <View style={{ alignItems: 'center', gap: 6 }}>
                 <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>CRUPIER</Text>
                 {warAnimando ? (
-                  <View style={[styles.cartaWarSlot, { backgroundColor: '#2E1065', borderColor: 'rgba(196,181,253,0.5)' }]}>
-                    <Text style={{ fontSize: 32 }}>🂠</Text>
+                  <View style={[styles.cartaWarSlot, { overflow: 'hidden' }]}>
+                    <Image source={require('./assets/Javicristo.png')} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                   </View>
                 ) : warCartaCrupier ? (
                   <RenderizarCarta nombre={warCartaCrupier.nombre} palo={warCartaCrupier.palo} oculta={false} />
@@ -1611,8 +1826,8 @@ export default function Casino() {
               <View style={{ alignItems: 'center', gap: 6 }}>
                 <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>TÚ</Text>
                 {warAnimando ? (
-                  <View style={[styles.cartaWarSlot, { backgroundColor: '#2E1065', borderColor: 'rgba(196,181,253,0.5)' }]}>
-                    <Text style={{ fontSize: 32 }}>🂠</Text>
+                  <View style={[styles.cartaWarSlot, { overflow: 'hidden' }]}>
+                    <Image source={require('./assets/Javicristo.png')} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                   </View>
                 ) : warCartaJugador ? (
                   <RenderizarCarta nombre={warCartaJugador.nombre} palo={warCartaJugador.palo} oculta={false} />
@@ -1705,8 +1920,11 @@ export default function Casino() {
           </View>
         )}
 
-      </View>
-    </ScrollView>
+          </View>{/* fin tableroCasinoPremium */}
+        </ScrollView>
+      )}{/* fin pantalla juego */}
+
+    </View>
   );
 }
 
