@@ -1,7 +1,165 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Alert, Image, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Dices, Gamepad, Layers, Flame, Trophy, Minus, Plus, LogOut, AlertTriangle, RefreshCw } from 'lucide-react-native';
+
+const AYUDA_TEXTOS = {
+  blackjack: {
+    titulo: '🃏 Black Jack',
+    reglas: [
+      { icono: '🎯', texto: 'Llega a 21 puntos o supera al crupier sin pasarte.' },
+      { icono: '🂡', texto: 'El As vale 11 o 1. Las figuras (J, Q, K) valen 10.' },
+      { icono: '✋', texto: 'PLANTARSE: te quedas con tus cartas y el crupier juega.' },
+      { icono: '➕', texto: 'PEDIR CARTA: recibes una carta más.' },
+      { icono: '🎉', texto: 'Blackjack natural (21 con 2 cartas) gana al instante.' },
+      { icono: '🏦', texto: 'El crupier pide hasta llegar a 17 o superarte.' },
+    ],
+    pagos: '· Ganar → x2 apuesta  · Empate → sin cambio',
+  },
+  ruleta: {
+    titulo: '🟢 Ruleta Europea',
+    reglas: [
+      { icono: '🎰', texto: 'Coloca fichas en los números o en las apuestas simples.' },
+      { icono: '🔴', texto: 'ROJO / NEGRO: paga x2 si la bola cae en ese color.' },
+      { icono: '🔢', texto: 'PAR / IMPAR: paga x2. El 0 no cuenta para estas apuestas.' },
+      { icono: '💯', texto: 'NÚMERO EXACTO: paga x36 la ficha apostada.' },
+      { icono: '🪙', texto: 'Selecciona el valor de ficha (10, 20 o 50) antes de colocar.' },
+      { icono: '🧹', texto: 'LIMPIAR devuelve todas las fichas al saldo.' },
+    ],
+    pagos: '· Color/Paridad → x2  · Número → x36',
+  },
+  tragaperras: {
+    titulo: '🎰 Cubatas Jackpot',
+    reglas: [
+      { icono: '🎲', texto: 'Hay 9 símbolos distintos para mayor dificultad.' },
+      { icono: '✌️', texto: '2 iguales en cualquier posición: reintegro x2.' },
+      { icono: '🏆', texto: '3 iguales: premio según símbolo (ver tabla en máquina).' },
+      { icono: '💎', texto: '💎×3 paga x60 · 💵×3 paga x40 · 🥩/🥪×3 paga x25.' },
+      { icono: '🍺', texto: 'El resto de símbolos ×3 pagan x15 la apuesta.' },
+    ],
+    pagos: '· Par → x2  · Trifecta → x15 hasta x60',
+  },
+  dados: {
+    titulo: '🎲 Dados — Craps',
+    reglas: [
+      { icono: '🎯', texto: 'TIRADA INICIAL: 7 u 11 ganas al instante (x2).' },
+      { icono: '💀', texto: 'TIRADA INICIAL: 2, 3 o 12 (Craps) → pierde la apuesta.' },
+      { icono: '📍', texto: 'Cualquier otro número se convierte en tu PUNTO.' },
+      { icono: '🔄', texto: 'FASE PUNTO: sigue tirando sin coste extra.' },
+      { icono: '✅', texto: 'Sacar tu punto antes que el 7 → ganas x2.' },
+      { icono: '❌', texto: 'Sacar 7 en fase punto → la casa gana.' },
+    ],
+    pagos: '· Natural → x2  · Punto conseguido → x2',
+  },
+  rasca: {
+    titulo: '🎟️ Rasca y Gana',
+    reglas: [
+      { icono: '🛒', texto: 'Compras un cartón al precio que elijas (10–50 monedas).' },
+      { icono: '👆', texto: 'Toca cada casilla para revelarla una a una.' },
+      { icono: '⚡', texto: 'REVELAR TODO destapa todas las casillas de golpe.' },
+      { icono: '✌️', texto: 'PAR (2 iguales en las 6 casillas): x2 la apuesta.' },
+      { icono: '🏆', texto: 'TRIFECTA (3 iguales): x15 mínimo.' },
+      { icono: '💎', texto: '💎×3 → x50 · 💵×3 → x30 · resto ×3 → x15.' },
+    ],
+    pagos: '· Par → x2  · Trifecta → x15 hasta x50',
+  },
+  war: {
+    titulo: '⚔️ War — Carta Alta',
+    reglas: [
+      { icono: '🃏', texto: 'Tú y el crupier recibís una carta cada uno.' },
+      { icono: '🏆', texto: 'La carta más alta gana. Ganas x2 tu apuesta.' },
+      { icono: '⚔️', texto: 'EMPATE: puedes ir a la GUERRA (doblas apuesta) o rendirte (pierdes la mitad).' },
+      { icono: '🔥', texto: 'En la GUERRA se reparten 3 cartas quemadas y una decisiva. Gana el mayor.' },
+      { icono: '🂡', texto: 'Orden: A > K > Q > J > 10 > ... > 2. El As es siempre el más alto.' },
+    ],
+    pagos: '· Victoria → x2  · Guerra ganada → x2 apuesta doble  · Rendirse → -mitad',
+  },
+};
+
+function ModalAyuda({ juego, onCerrar }) {
+  if (!juego) return null;
+  const info = AYUDA_TEXTOS[juego];
+  return (
+    <Modal transparent animationType="fade" visible={!!juego} onRequestClose={onCerrar}>
+      <TouchableOpacity style={estilosModal.fondo} activeOpacity={1} onPress={onCerrar}>
+        <TouchableOpacity activeOpacity={1} style={estilosModal.caja}>
+          <Text style={estilosModal.titulo}>{info.titulo}</Text>
+          <View style={estilosModal.separador} />
+          {info.reglas.map((r, i) => (
+            <View key={i} style={estilosModal.filaRegla}>
+              <Text style={estilosModal.icono}>{r.icono}</Text>
+              <Text style={estilosModal.textoRegla}>{r.texto}</Text>
+            </View>
+          ))}
+          <View style={estilosModal.separador} />
+          <Text style={estilosModal.pagos}>{info.pagos}</Text>
+          <TouchableOpacity style={estilosModal.btnCerrar} onPress={onCerrar}>
+            <Text style={estilosModal.txtBtnCerrar}>ENTENDIDO</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const estilosModal = StyleSheet.create({
+  fondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  caja: { backgroundColor: '#1C1130', borderRadius: 18, padding: 22, width: '100%', borderWidth: 1.5, borderColor: 'rgba(254,240,138,0.3)' },
+  titulo: { color: '#FEF08A', fontWeight: '900', fontSize: 17, letterSpacing: 0.5, marginBottom: 14, textAlign: 'center' },
+  separador: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 12 },
+  filaRegla: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 9 },
+  icono: { fontSize: 16, width: 22, textAlign: 'center', marginTop: 1 },
+  textoRegla: { flex: 1, color: '#D1D5DB', fontSize: 13, fontWeight: '500', lineHeight: 19 },
+  pagos: { color: '#9CA3AF', fontSize: 11, fontWeight: '700', textAlign: 'center', letterSpacing: 0.5 },
+  btnCerrar: { backgroundColor: '#7C3AED', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 16, borderBottomWidth: 3, borderColor: '#5B21B6' },
+  txtBtnCerrar: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 1 },
+});
+
+// Componente de dado con puntos dibujados (evita emojis unicode que no contrastan en fondos oscuros)
+const PUNTOS_DADO = {
+  1: [[50, 50]],
+  2: [[25, 25], [75, 75]],
+  3: [[25, 25], [50, 50], [75, 75]],
+  4: [[25, 25], [75, 25], [25, 75], [75, 75]],
+  5: [[25, 25], [75, 25], [50, 50], [25, 75], [75, 75]],
+  6: [[25, 22], [75, 22], [25, 50], [75, 50], [25, 78], [75, 78]],
+};
+
+function DadoVisual({ valor, size = 80, animando = false }) {
+  const puntos = valor ? PUNTOS_DADO[valor] : [];
+  return (
+    <View style={{
+      width: size, height: size,
+      backgroundColor: animando ? '#fff' : '#F8F5FF',
+      borderRadius: 14,
+      borderWidth: 2.5,
+      borderColor: animando ? '#F87171' : 'rgba(248,113,113,0.5)',
+      position: 'relative',
+      shadowColor: '#F87171',
+      shadowOpacity: animando ? 0.6 : 0.15,
+      shadowRadius: 8,
+      elevation: 4,
+      justifyContent: 'center',
+      alignItems: 'center',
+    }}>
+      {valor === null ? (
+        <Text style={{ color: '#C4B5FD', fontSize: 28, fontWeight: '900' }}>?</Text>
+      ) : (
+        puntos.map((p, i) => (
+          <View key={i} style={{
+            position: 'absolute',
+            width: size * 0.16,
+            height: size * 0.16,
+            borderRadius: size * 0.08,
+            backgroundColor: '#1C1130',
+            left: (p[0] / 100) * size - (size * 0.08),
+            top: (p[1] / 100) * size - (size * 0.08),
+          }} />
+        ))
+      )}
+    </View>
+  );
+}
 
 // Ampliamos el array a 9 símbolos para diluir la probabilidad y subir la dificultad real
 const SIMBOLOS_SLOTS = ['🍺', '🍷', '🥩', '💵', '💎', '🃏', '🔊', '🧊', '🥪'];
@@ -69,7 +227,7 @@ export default function Casino() {
   const [rachaMaxima, setRachaMaxima] = useState(0);
   const [monedas, setMonedas] = useState(500);
   const [apuestaActual, setApuestaActual] = useState(50);
-  const LIMITE_APUESTA_MAX = 50;
+
 
   // Estados de la Ruleta compacta
   const [fichaSeleccionada, setFichaSeleccionada] = useState(10);
@@ -88,6 +246,35 @@ export default function Casino() {
   const [apuestaSlots, setApuestaSlots] = useState(20);
   const [mensajeSlots, setMensajeSlots] = useState('');
   const [resultadoTipoSlots, setResultadoTipoSlots] = useState('');
+
+  // Estados de los Dados (Craps simplificado)
+  const [apuestaDados, setApuestaDados] = useState(20);
+  const [dadosValores, setDadosValores] = useState([null, null]);
+  const [dadosTirandose, setDadosTirandose] = useState(false);
+  const [dadosPunto, setDadosPunto] = useState(null);
+  const [dadosFase, setDadosFase] = useState('inicio'); // 'inicio' | 'punto'
+  const [dadosMensaje, setDadosMensaje] = useState('');
+  const [dadosResultadoTipo, setDadosResultadoTipo] = useState('');
+
+  // Estados del Rasca y Gana
+  const [rascaApuesta, setRascaApuesta] = useState(20);
+  const [rascaCasillas, setRascaCasillas] = useState([]);
+  const [rascaFase, setRascaFase] = useState('comprar'); // 'comprar' | 'rascando' | 'fin'
+  const [rascaMensaje, setRascaMensaje] = useState('');
+  const [rascaResultadoTipo, setRascaResultadoTipo] = useState('');
+
+  // Estados del War (Carta Alta)
+  const [warApuesta, setWarApuesta] = useState(20);
+  const [warCartaJugador, setWarCartaJugador] = useState(null);
+  const [warCartaCrupier, setWarCartaCrupier] = useState(null);
+  const [warCartasGuerra, setWarCartasGuerra] = useState(null); // { jugador, crupier }
+  const [warFase, setWarFase] = useState('inicio'); // 'inicio' | 'esperando' | 'empate' | 'guerra' | 'fin'
+  const [warMensaje, setWarMensaje] = useState('');
+  const [warResultadoTipo, setWarResultadoTipo] = useState(''); // 'ganado'|'perdido'|'empate'|''
+  const [warAnimando, setWarAnimando] = useState(false);
+
+  // Modal de ayuda
+  const [modalAyuda, setModalAyuda] = useState(null); // null | 'blackjack' | 'ruleta' | 'tragaperras' | 'dados' | 'rasca'
 
   useEffect(() => {
     cargarDatosCasinoLocal();
@@ -438,7 +625,7 @@ export default function Casino() {
           balancePremios += Math.floor(apuestaSlots * 2);
         }
 
-        const saldoFinalCasino = monedas + balancePremios;
+        const saldoFinalCasino = saldoResta + balancePremios;
         setMonedas(saldoFinalCasino);
         guardarDatoCasinoLocal('@bj_monedas', saldoFinalCasino);
 
@@ -448,7 +635,7 @@ export default function Casino() {
         } else {
           setResultadoTipoSlots('perdido');
           setMensajeSlots('❌ Sin premio. ¡Dale otra vez!');
-          verificarAuxilioBancarrota(saldoResta);
+          verificarAuxilioBancarrota(saldoFinalCasino);
         }
 
         setGirandoSlots(false);
@@ -456,16 +643,371 @@ export default function Casino() {
     }, 100);
   };
 
+  // ─── LÓGICA DADOS (CRAPS SIMPLIFICADO) ───────────────────────────────────────
+  const tirarDados = () => {
+    if (dadosTirandose) return;
+    if (dadosFase === 'inicio' && monedas < apuestaDados) {
+      Alert.alert('Falta saldo', 'No tienes suficientes monedas para jugar.');
+      return;
+    }
+
+    setDadosTirandose(true);
+    setDadosMensaje('');
+    setDadosResultadoTipo('');
+
+    // Descontar apuesta solo en la tirada inicial
+    let saldoBase = monedas;
+    if (dadosFase === 'inicio') {
+      saldoBase = monedas - apuestaDados;
+      setMonedas(saldoBase);
+      guardarDatoCasinoLocal('@bj_monedas', saldoBase);
+    }
+
+    // Animación de dados sacudiendo
+    let tick = 0;
+    const animInterval = setInterval(() => {
+      setDadosValores([
+        Math.ceil(Math.random() * 6),
+        Math.ceil(Math.random() * 6),
+      ]);
+      tick++;
+      if (tick >= 10) {
+        clearInterval(animInterval);
+
+        const d1 = Math.ceil(Math.random() * 6);
+        const d2 = Math.ceil(Math.random() * 6);
+        const suma = d1 + d2;
+        setDadosValores([d1, d2]);
+        setDadosTirandose(false);
+
+        if (dadosFase === 'inicio') {
+          if (suma === 7 || suma === 11) {
+            // Gana al instante
+            const premio = saldoBase + apuestaDados * 2;
+            setMonedas(premio);
+            guardarDatoCasinoLocal('@bj_monedas', premio);
+            setDadosMensaje(`🎲 ¡${suma}! Victoria natural. +${apuestaDados * 2} monedas`);
+            setDadosResultadoTipo('ganado');
+            setDadosFase('inicio');
+            verificarAuxilioBancarrota(premio);
+          } else if (suma === 2 || suma === 3 || suma === 12) {
+            // Craps, pierde al instante
+            const saldoFinal = verificarAuxilioBancarrota(saldoBase);
+            setMonedas(saldoFinal);
+            setDadosMensaje(`💀 ¡Craps! ${suma} — la casa gana.`);
+            setDadosResultadoTipo('perdido');
+            setDadosFase('inicio');
+          } else {
+            // Establece punto
+            setDadosPunto(suma);
+            setDadosFase('punto');
+            setDadosMensaje(`🎯 Punto: ${suma}. ¡Sácalo antes que el 7!`);
+          }
+        } else {
+          // Fase punto
+          if (suma === dadosPunto) {
+            const premio = saldoBase + apuestaDados * 2;
+            setMonedas(premio);
+            guardarDatoCasinoLocal('@bj_monedas', premio);
+            setDadosMensaje(`🏆 ¡${suma}! Punto conseguido. +${apuestaDados * 2} monedas`);
+            setDadosResultadoTipo('ganado');
+            setDadosFase('inicio');
+            setDadosPunto(null);
+          } else if (suma === 7) {
+            const saldoFinal = verificarAuxilioBancarrota(saldoBase);
+            setMonedas(saldoFinal);
+            setDadosMensaje(`💀 ¡7! La casa gana. Punto perdido.`);
+            setDadosResultadoTipo('perdido');
+            setDadosFase('inicio');
+            setDadosPunto(null);
+          } else {
+            setDadosMensaje(`🎲 ${suma}. Punto sigue siendo ${dadosPunto}, sigue tirando.`);
+            setDadosResultadoTipo('');
+          }
+        }
+      }
+    }, 80);
+  };
+
+  const resetearDados = () => {
+    setDadosValores([null, null]);
+    setDadosFase('inicio');
+    setDadosPunto(null);
+    setDadosMensaje('');
+    setDadosResultadoTipo('');
+  };
+
+  // ─── LÓGICA RASCA Y GANA ─────────────────────────────────────────────────────
+  const SIMBOLOS_RASCA = ['🍺', '🍷', '🥩', '💎', '💵', '🃏'];
+
+  const comprarRasca = () => {
+    if (monedas < rascaApuesta) {
+      Alert.alert('Falta saldo', 'No tienes suficientes monedas para comprar el cartón.');
+      return;
+    }
+    const saldoResta = monedas - rascaApuesta;
+    setMonedas(saldoResta);
+    guardarDatoCasinoLocal('@bj_monedas', saldoResta);
+
+    // Generar las 6 casillas con resultado predeterminado (para que el premio sea coherente)
+    // Decidir resultado de antemano para control de probabilidad
+    const rand = Math.random();
+    let simbolos;
+    if (rand < 0.04) {
+      // ~4%: premio gordo — 3 símbolos iguales en posiciones 0,1,2 (o spread)
+      const s = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
+      const resto = Array.from({ length: 3 }, () => SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)]);
+      simbolos = [s, s, s, ...resto];
+    } else if (rand < 0.30) {
+      // ~26%: premio pequeño — exactamente 2 iguales
+      const s = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
+      const resto = Array.from({ length: 4 }, () => {
+        let r;
+        do { r = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)]; } while (r === s);
+        return r;
+      });
+      simbolos = [s, s, ...resto];
+    } else {
+      // ~70%: sin premio — todos diferentes o sin pares entre las primeras 3
+      simbolos = Array.from({ length: 6 }, () => SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)]);
+      // Forzar que no haya 3 iguales ni 2 entre [0,1,2]
+      for (let i = 0; i < 6; i++) {
+        let intentos = 0;
+        while (
+          (simbolos.filter((s, idx) => idx !== i && s === simbolos[i]).length >= 2) ||
+          (i < 3 && simbolos.indexOf(simbolos[i]) !== i && simbolos.indexOf(simbolos[i]) < 3)
+        ) {
+          simbolos[i] = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
+          if (++intentos > 20) break;
+        }
+      }
+    }
+
+    // Mezclar posiciones
+    for (let i = simbolos.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [simbolos[i], simbolos[j]] = [simbolos[j], simbolos[i]];
+    }
+
+    setRascaCasillas(simbolos.map(s => ({ simbolo: s, revelada: false })));
+    setRascaFase('rascando');
+    setRascaMensaje('Toca cada casilla para rascar...');
+    setRascaResultadoTipo('');
+  };
+
+  const rascarCasilla = (index) => {
+    if (rascaFase !== 'rascando') return;
+    const nuevas = rascaCasillas.map((c, i) => i === index ? { ...c, revelada: true } : c);
+    setRascaCasillas(nuevas);
+
+    // Si todas reveladas, calcular premio
+    const todasReveladas = nuevas.every(c => c.revelada);
+    if (todasReveladas) {
+      const simbolosRevelados = nuevas.map(c => c.simbolo);
+      const conteo = {};
+      simbolosRevelados.forEach(s => { conteo[s] = (conteo[s] || 0) + 1; });
+      const maxIguales = Math.max(...Object.values(conteo));
+      const simboloGanador = Object.keys(conteo).find(k => conteo[k] === maxIguales);
+
+      let premio = 0;
+      let msg = '';
+      if (maxIguales >= 3) {
+        const mult = simboloGanador === '💎' ? 50 : simboloGanador === '💵' ? 30 : 15;
+        premio = rascaApuesta * mult;
+        msg = `🎉 ¡TRIFECTA! ${simboloGanador}×3 — +${premio} monedas`;
+        setRascaResultadoTipo('ganado');
+      } else if (maxIguales === 2) {
+        premio = rascaApuesta * 2;
+        msg = `✨ Par de ${simboloGanador} — +${premio} monedas`;
+        setRascaResultadoTipo('ganado');
+      } else {
+        msg = '❌ Sin premio. ¡Prueba otro cartón!';
+        setRascaResultadoTipo('perdido');
+      }
+
+      if (premio > 0) {
+        const nuevoSaldo = monedas + premio;
+        setMonedas(nuevoSaldo);
+        guardarDatoCasinoLocal('@bj_monedas', nuevoSaldo);
+        verificarAuxilioBancarrota(nuevoSaldo);
+      } else {
+        verificarAuxilioBancarrota(monedas);
+      }
+      setRascaMensaje(msg);
+      setRascaFase('fin');
+    }
+  };
+
+  const rascaRevelarTodo = () => {
+    if (rascaFase !== 'rascando') return;
+    const nuevas = rascaCasillas.map(c => ({ ...c, revelada: true }));
+    setRascaCasillas(nuevas);
+
+    const simbolosRevelados = nuevas.map(c => c.simbolo);
+    const conteo = {};
+    simbolosRevelados.forEach(s => { conteo[s] = (conteo[s] || 0) + 1; });
+    const maxIguales = Math.max(...Object.values(conteo));
+    const simboloGanador = Object.keys(conteo).find(k => conteo[k] === maxIguales);
+
+    let premio = 0;
+    let msg = '';
+    if (maxIguales >= 3) {
+      const mult = simboloGanador === '💎' ? 50 : simboloGanador === '💵' ? 30 : 15;
+      premio = rascaApuesta * mult;
+      msg = `🎉 ¡TRIFECTA! ${simboloGanador}×3 — +${premio} monedas`;
+      setRascaResultadoTipo('ganado');
+    } else if (maxIguales === 2) {
+      premio = rascaApuesta * 2;
+      msg = `✨ Par de ${simboloGanador} — +${premio} monedas`;
+      setRascaResultadoTipo('ganado');
+    } else {
+      msg = '❌ Sin premio. ¡Prueba otro cartón!';
+      setRascaResultadoTipo('perdido');
+    }
+
+    if (premio > 0) {
+      const nuevoSaldo = monedas + premio;
+      setMonedas(nuevoSaldo);
+      guardarDatoCasinoLocal('@bj_monedas', nuevoSaldo);
+    } else {
+      verificarAuxilioBancarrota(monedas);
+    }
+    setRascaMensaje(msg);
+    setRascaFase('fin');
+  };
+
+  const nuevaRasca = () => {
+    setRascaCasillas([]);
+    setRascaFase('comprar');
+    setRascaMensaje('');
+    setRascaResultadoTipo('');
+  };
+
+  // ─── LÓGICA WAR (CARTA ALTA) ──────────────────────────────────────────────────
+  const BARAJA_WAR = (() => {
+    const palos = ['♠', '♥', '♦', '♣'];
+    const figuras = [
+      { nombre: '2', valor: 2 }, { nombre: '3', valor: 3 }, { nombre: '4', valor: 4 },
+      { nombre: '5', valor: 5 }, { nombre: '6', valor: 6 }, { nombre: '7', valor: 7 },
+      { nombre: '8', valor: 8 }, { nombre: '9', valor: 9 }, { nombre: '10', valor: 10 },
+      { nombre: 'J', valor: 11 }, { nombre: 'Q', valor: 12 }, { nombre: 'K', valor: 13 }, { nombre: 'A', valor: 14 },
+    ];
+    const mazo = [];
+    for (const p of palos) for (const f of figuras) mazo.push({ ...f, palo: p });
+    return mazo;
+  })();
+
+  const cartaAleatoria = () => BARAJA_WAR[Math.floor(Math.random() * BARAJA_WAR.length)];
+
+  const jugarWar = () => {
+    if (monedas < warApuesta) { Alert.alert('Falta saldo', 'No tienes suficientes monedas.'); return; }
+    setWarAnimando(true);
+    setWarMensaje('');
+    setWarResultadoTipo('');
+    setWarCartasGuerra(null);
+
+    const saldoResta = monedas - warApuesta;
+    setMonedas(saldoResta);
+    guardarDatoCasinoLocal('@bj_monedas', saldoResta);
+
+    setTimeout(() => {
+      const cJugador = cartaAleatoria();
+      const cCrupier = cartaAleatoria();
+      setWarCartaJugador(cJugador);
+      setWarCartaCrupier(cCrupier);
+      setWarAnimando(false);
+
+      if (cJugador.valor > cCrupier.valor) {
+        const premio = saldoResta + warApuesta * 2;
+        setMonedas(premio);
+        guardarDatoCasinoLocal('@bj_monedas', premio);
+        setWarMensaje(`🏆 ¡Ganas! ${cJugador.nombre}${cJugador.palo} > ${cCrupier.nombre}${cCrupier.palo} · +${warApuesta * 2} monedas`);
+        setWarResultadoTipo('ganado');
+        setWarFase('fin');
+      } else if (cJugador.valor < cCrupier.valor) {
+        const saldoFin = verificarAuxilioBancarrota(saldoResta);
+        setMonedas(saldoFin);
+        setWarMensaje(`💀 Pierdes. ${cJugador.nombre}${cJugador.palo} < ${cCrupier.nombre}${cCrupier.palo}`);
+        setWarResultadoTipo('perdido');
+        setWarFase('fin');
+      } else {
+        setWarMensaje(`⚔️ ¡EMPATE! Ambos con ${cJugador.nombre}. ¿Vas a la guerra?`);
+        setWarResultadoTipo('empate');
+        setWarFase('empate');
+      }
+    }, 600);
+  };
+
+  const irAGuerra = () => {
+    // Doblar la apuesta y tirar de nuevo
+    if (monedas < warApuesta) { Alert.alert('Falta saldo', 'No tienes monedas para doblar.'); return; }
+    setWarAnimando(true);
+    setWarMensaje('');
+
+    const saldoResta = monedas - warApuesta; // dobla la apuesta total
+    setMonedas(saldoResta);
+    guardarDatoCasinoLocal('@bj_monedas', saldoResta);
+
+    setTimeout(() => {
+      const cJugador = cartaAleatoria();
+      const cCrupier = cartaAleatoria();
+      setWarCartasGuerra({ jugador: cJugador, crupier: cCrupier });
+      setWarAnimando(false);
+
+      if (cJugador.valor >= cCrupier.valor) {
+        // Gana la guerra: cobra apuesta original + apuesta doble
+        const premio = saldoResta + warApuesta * 4;
+        setMonedas(premio);
+        guardarDatoCasinoLocal('@bj_monedas', premio);
+        setWarMensaje(`🔥 ¡GUERRA GANADA! ${cJugador.nombre}${cJugador.palo} vs ${cCrupier.nombre}${cCrupier.palo} · +${warApuesta * 4} monedas`);
+        setWarResultadoTipo('ganado');
+      } else {
+        const saldoFin = verificarAuxilioBancarrota(saldoResta);
+        setMonedas(saldoFin);
+        setWarMensaje(`💀 Guerra perdida. ${cJugador.nombre}${cJugador.palo} < ${cCrupier.nombre}${cCrupier.palo}`);
+        setWarResultadoTipo('perdido');
+      }
+      setWarFase('fin');
+    }, 700);
+  };
+
+  const rendirse = () => {
+    // Pierde la mitad de la apuesta (recupera la otra mitad)
+    const recuperado = Math.floor(warApuesta / 2);
+    const saldoFin = monedas + recuperado;
+    setMonedas(saldoFin);
+    guardarDatoCasinoLocal('@bj_monedas', saldoFin);
+    setWarMensaje(`🏳️ Te rindes. Recuperas ${recuperado} monedas.`);
+    setWarResultadoTipo('perdido');
+    setWarFase('fin');
+    verificarAuxilioBancarrota(saldoFin);
+  };
+
+  const resetearWar = () => {
+    setWarCartaJugador(null);
+    setWarCartaCrupier(null);
+    setWarCartasGuerra(null);
+    setWarFase('inicio');
+    setWarMensaje('');
+    setWarResultadoTipo('');
+    setWarAnimando(false);
+  };
+
   return (
-    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}>
+    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} style={{ backgroundColor: '#0F1923' }}>
       <View style={styles.tableroCasinoPremium}>
+
+        <ModalAyuda juego={modalAyuda} onCerrar={() => setModalAyuda(null)} />
 
         {/* HUD Superior de Monedas global */}
         <View style={styles.cabeceraCasinoMesa}>
-          <Dices size={20} color="#fff" />
-          <Text style={styles.txtMesaPremiumTitulo}>CASINO LA BODEGUILLA</Text>
-          <View style={{ backgroundColor: '#290E3B', paddingVertical: 4, paddingHorizontal: 12, borderRadius: 12 }}>
-            <Text style={{ color: '#FEF08A', fontWeight: 'bold', fontSize: 13 }}>MONEDAS: {monedas}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+            <Dices size={18} color="#FEF08A" />
+            <Text style={styles.txtMesaPremiumTitulo}>LA BODEGUILLA</Text>
+          </View>
+          <View style={styles.hudMonedasPill}>
+            <Text style={{ color: '#FEF08A', fontSize: 13 }}>🪙</Text>
+            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14, marginLeft: 5 }}>{monedas}</Text>
           </View>
         </View>
 
@@ -474,39 +1016,98 @@ export default function Casino() {
           <View style={styles.lobbyCasinoListaVertical}>
 
             {/* Tarjeta Rectangular 1: Blackjack */}
-            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => setJuegoSeleccionado('blackjack')}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Layers size={26} color="#5B3281" />
-                <Text style={styles.txtTituloTarjetaJuego}>BLACK JACK</Text>
+            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => setJuegoSeleccionado('blackjack')} activeOpacity={0.8}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={styles.iconoTarjetaCirculo}>
+                  <Layers size={22} color="#FEF08A" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txtTituloTarjetaJuego}>BLACK JACK</Text>
+                  <Text style={styles.txtSubtituloTarjetaJuego}>La mesa clásica · Apuesta libre</Text>
+                </View>
+                <View style={styles.flechaTarjeta}><Text style={{ color: '#FEF08A', fontWeight: '900' }}>›</Text></View>
               </View>
               <View style={styles.miniContenedorRachasFila}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Flame size={12} color="#EAB308" />
+                  <Flame size={11} color="#EAB308" />
                   <Text style={styles.txtMiniRachaText}>Racha: {rachaActual}</Text>
                 </View>
+                <View style={{ width: 1, height: 10, backgroundColor: 'rgba(255,255,255,0.15)' }} />
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Trophy size={11} color="#34C759" />
-                  <Text style={styles.txtMiniRachaText}>Máx: {rachaMaxima}</Text>
+                  <Text style={styles.txtMiniRachaText}>Récord: {rachaMaxima}</Text>
                 </View>
               </View>
             </TouchableOpacity>
 
             {/* Tarjeta Rectangular 2: Ruleta */}
-            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => setJuegoSeleccionado('ruleta')}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <RefreshCw size={26} color="#15803d" />
-                <Text style={styles.txtTituloTarjetaJuego}>RULETA EUROPEA</Text>
+            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => setJuegoSeleccionado('ruleta')} activeOpacity={0.8}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[styles.iconoTarjetaCirculo, { backgroundColor: 'rgba(21,128,61,0.25)', borderColor: 'rgba(21,128,61,0.5)' }]}>
+                  <RefreshCw size={22} color="#4ADE80" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txtTituloTarjetaJuego}>RULETA EUROPEA</Text>
+                  <Text style={styles.txtSubtituloTarjetaJuego}>Tapete táctil · Paga x36 al número</Text>
+                </View>
+                <View style={styles.flechaTarjeta}><Text style={{ color: '#FEF08A', fontWeight: '900' }}>›</Text></View>
               </View>
-              <Text style={[styles.txtMiniRachaText, { color: '#8E8E93', marginTop: 4, marginLeft: 36 }]}>Tapete Táctil Premium</Text>
             </TouchableOpacity>
 
             {/* Tarjeta Rectangular 3: Tragaperras */}
-            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => setJuegoSeleccionado('tragaperras')}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Gamepad size={26} color="#b45309" />
-                <Text style={styles.txtTituloTarjetaJuego}>TRAGAPERRAS LA PEÑA</Text>
+            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => setJuegoSeleccionado('tragaperras')} activeOpacity={0.8}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[styles.iconoTarjetaCirculo, { backgroundColor: 'rgba(180,83,9,0.25)', borderColor: 'rgba(180,83,9,0.5)' }]}>
+                  <Gamepad size={22} color="#FBBF24" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txtTituloTarjetaJuego}>CUBATAS JACKPOT</Text>
+                  <Text style={styles.txtSubtituloTarjetaJuego}>Tragaperras · 9 símbolos · x60 al trifecta</Text>
+                </View>
+                <View style={styles.flechaTarjeta}><Text style={{ color: '#FEF08A', fontWeight: '900' }}>›</Text></View>
               </View>
-              <Text style={[styles.txtMiniRachaText, { color: '#8E8E93', marginTop: 4, marginLeft: 36 }]}>Prueba tu suerte con los cubatas</Text>
+            </TouchableOpacity>
+
+            {/* Tarjeta Rectangular 4: Dados */}
+            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => { resetearDados(); setJuegoSeleccionado('dados'); }} activeOpacity={0.8}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[styles.iconoTarjetaCirculo, { backgroundColor: 'rgba(239,68,68,0.2)', borderColor: 'rgba(239,68,68,0.4)' }]}>
+                  <Dices size={22} color="#F87171" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txtTituloTarjetaJuego}>DADOS — CRAPS</Text>
+                  <Text style={styles.txtSubtituloTarjetaJuego}>7 u 11 ganas · 2, 3, 12 pierdes · x2 apuesta</Text>
+                </View>
+                <View style={styles.flechaTarjeta}><Text style={{ color: '#FEF08A', fontWeight: '900' }}>›</Text></View>
+              </View>
+            </TouchableOpacity>
+
+            {/* Tarjeta Rectangular 5: Rasca y Gana */}
+            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => { nuevaRasca(); setJuegoSeleccionado('rasca'); }} activeOpacity={0.8}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[styles.iconoTarjetaCirculo, { backgroundColor: 'rgba(16,185,129,0.2)', borderColor: 'rgba(16,185,129,0.4)' }]}>
+                  <AlertTriangle size={22} color="#34D399" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txtTituloTarjetaJuego}>RASCA Y GANA</Text>
+                  <Text style={styles.txtSubtituloTarjetaJuego}>6 casillas · Par x2 · Trifecta hasta x50</Text>
+                </View>
+                <View style={styles.flechaTarjeta}><Text style={{ color: '#FEF08A', fontWeight: '900' }}>›</Text></View>
+              </View>
+            </TouchableOpacity>
+
+            {/* Tarjeta Rectangular 6: War */}
+            <TouchableOpacity style={styles.tarjetaJuegoRectangularGris} onPress={() => { resetearWar(); setJuegoSeleccionado('war'); }} activeOpacity={0.8}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={[styles.iconoTarjetaCirculo, { backgroundColor: 'rgba(245,158,11,0.2)', borderColor: 'rgba(245,158,11,0.4)' }]}>
+                  <Layers size={22} color="#FBBF24" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.txtTituloTarjetaJuego}>WAR — CARTA ALTA</Text>
+                  <Text style={styles.txtSubtituloTarjetaJuego}>Tú vs crupier · Empate → ¡a la guerra! · x2</Text>
+                </View>
+                <View style={styles.flechaTarjeta}><Text style={{ color: '#FEF08A', fontWeight: '900' }}>›</Text></View>
+              </View>
             </TouchableOpacity>
 
           </View>
@@ -518,35 +1119,45 @@ export default function Casino() {
             {!verTapete ? (
               <View style={styles.lobbyCasinoCaja}>
                 <View style={styles.tarjetaBlancaLobbyBase}>
-                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1C1C1E', marginBottom: 14 }}>MESA DE BLACKJACK</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <Layers size={20} color="#FEF08A" />
+                    <Text style={{ fontSize: 16, fontWeight: '900', color: '#fff', letterSpacing: 1, flex: 1 }}>MESA DE BLACKJACK</Text>
+                    <TouchableOpacity onPress={() => setModalAyuda('blackjack')} style={styles.btnAyuda}>
+                      <Text style={styles.txtBtnAyuda}>?</Text>
+                    </TouchableOpacity>
+                  </View>
 
                   <View style={styles.cajaEstadisticasRachas}>
                     <View style={styles.filaRachaStat}>
                       <Flame size={15} color="#EAB308" />
-                      <Text style={styles.txtRachaStatLabel}>Racha Actual:</Text>
+                      <Text style={styles.txtRachaStatLabel}>Racha actual</Text>
                       <Text style={styles.txtRachaStatValor}>{rachaActual}</Text>
                     </View>
+                    <View style={{ height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 4 }} />
                     <View style={styles.filaRachaStat}>
                       <Trophy size={13} color="#34C759" />
-                      <Text style={styles.txtRachaStatLabel}>Racha Máxima:</Text>
+                      <Text style={styles.txtRachaStatLabel}>Récord personal</Text>
                       <Text style={styles.txtRachaStatValor}>{rachaMaxima}</Text>
                     </View>
                   </View>
 
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 14, gap: 12 }}>
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#555' }}>Apuesta:</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E5E5EA', borderRadius: 8 }}>
-                      <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaActual(a => Math.max(10, a - 10))}><Minus size={14} color="#000" /></TouchableOpacity>
-                      <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: 'bold', color: '#000' }}>{apuestaActual}</Text>
-                      <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaActual(a => Math.min(LIMITE_APUESTA_MAX, monedas, a + 10))}><Plus size={14} color="#000" /></TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 14, gap: 8 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#aaa' }}>Apuesta:</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                      <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaActual(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
+                      <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{apuestaActual}</Text>
+                      <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaActual(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
                     </View>
+                    <TouchableOpacity onPress={() => setApuestaActual(monedas)} style={styles.btnTodoIn}>
+                      <Text style={styles.txtBtnTodoIn}>TODO</Text>
+                    </TouchableOpacity>
                   </View>
 
                   <TouchableOpacity style={styles.btnIniciarJuegoPremium} onPress={iniciarPartidaBlackjack}>
                     <Text style={styles.txtBtnJuegoText}>REPARTIR CARTAS</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.btnRegresarLobbyMenu} onPress={() => setJuegoSeleccionado(null)}>
-                    <Text style={{ color: '#5B3281', fontWeight: 'bold' }}>CAMBIAR DE JUEGO</Text>
+                    <Text style={{ color: '#9CA3AF', fontWeight: '600', fontSize: 13 }}>← Volver al menú</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -606,7 +1217,7 @@ export default function Casino() {
                         <Text style={styles.txtBtnOtraPartidaText}>NUEVA MANO</Text>
                       </TouchableOpacity>
                       <TouchableOpacity disabled={repartiendo} style={styles.btnSalirAlLobby} onPress={() => setVerTapete(false)}>
-                        <LogOut size={16} color="#fff" style={{ marginRight: 6 }} />
+                        <LogOut size={16} color="#D1D5DB" style={{ marginRight: 6 }} />
                         <Text style={styles.txtBtnSalirLobbyText}>ABANDONAR MESA</Text>
                       </TouchableOpacity>
                     </>
@@ -627,7 +1238,12 @@ export default function Casino() {
               <View style={[styles.circuloResultadoRuletaGigante, { backgroundColor: colorGanadorRuleta }]}>
                 <Text style={styles.txtResultadoRuletaNumeroGigante}>{numeroGanadorRuleta !== null ? numeroGanadorRuleta : '--'}</Text>
               </View>
-              <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Apuesta: {calcularTotalApostadoRuleta()}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Apuesta: {calcularTotalApostadoRuleta()}</Text>
+                <TouchableOpacity onPress={() => setModalAyuda('ruleta')} style={styles.btnAyuda}>
+                  <Text style={styles.txtBtnAyuda}>?</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.tapeteGridFichasAmpliado}>
@@ -686,8 +1302,8 @@ export default function Casino() {
             <View style={{ gap: 6, paddingBottom: 4 }}>
               <TouchableOpacity disabled={girandoRuleta} style={[styles.btnOtraPartidaVerde, { paddingVertical: 12 }]} onPress={lanzarBolaRuleta}><Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>TIRAR BOLA</Text></TouchableOpacity>
               <View style={{ flexDirection: 'row', gap: 6 }}>
-                <TouchableOpacity disabled={girandoRuleta} style={[styles.btnCasinoAccionSecundario, { paddingVertical: 10 }]} onPress={limpiarTapeteRuleta}><Text style={{ fontSize: 12, fontWeight: 'bold' }}>LIMPIAR</Text></TouchableOpacity>
-                <TouchableOpacity disabled={girandoRuleta} style={[styles.btnSalirAlLobby, { paddingVertical: 10, flex: 1, width: 'auto' }]} onPress={() => setJuegoSeleccionado(null)}><Text style={{ fontSize: 12, color: '#fff', fontWeight: 'bold' }}>SALIR AL MENÚ</Text></TouchableOpacity>
+                <TouchableOpacity disabled={girandoRuleta} style={[styles.btnCasinoAccionSecundario, { paddingVertical: 10 }]} onPress={limpiarTapeteRuleta}><Text style={{ fontSize: 12, fontWeight: 'bold', color: '#D1D5DB' }}>LIMPIAR</Text></TouchableOpacity>
+              <TouchableOpacity disabled={girandoRuleta} style={[styles.btnSalirAlLobby, { paddingVertical: 10, flex: 1, width: 'auto' }]} onPress={() => setJuegoSeleccionado(null)}><Text style={{ fontSize: 12, color: '#D1D5DB', fontWeight: 'bold' }}>← MENÚ</Text></TouchableOpacity>
               </View>
             </View>
 
@@ -714,6 +1330,9 @@ export default function Casino() {
             <View style={styles.chasisTragaperrasMueble}>
               <View style={styles.marquesinaLuminosa}>
                 <Text style={styles.txtMarquesinaTitulo}>CUBATAS JACKPOT</Text>
+                <TouchableOpacity onPress={() => setModalAyuda('tragaperras')} style={[styles.btnAyuda, { position: 'absolute', right: 10 }]}>
+                  <Text style={styles.txtBtnAyuda}>?</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Ventana de Rodillos con Estilo Neon */}
@@ -747,13 +1366,16 @@ export default function Casino() {
               ]}>{mensajeSlots || ' '}</Text></View>
 
             {/* Selector de Apuestas */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 10, gap: 12 }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>Apuesta:</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#E5E5EA', borderRadius: 8 }}>
-                <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaSlots(a => Math.max(10, a - 10))}><Minus size={14} color="#000" /></TouchableOpacity>
-                <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: 'bold', color: '#000' }}>{apuestaSlots}</Text>
-                <TouchableOpacity style={{ padding: 8 }} onPress={() => setApuestaSlots(a => Math.min(LIMITE_APUESTA_MAX, monedas, a + 10))}><Plus size={14} color="#000" /></TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 10, gap: 8 }}>
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#9CA3AF' }}>Apuesta:</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaSlots(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
+                <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{apuestaSlots}</Text>
+                <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaSlots(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
               </View>
+              <TouchableOpacity onPress={() => setApuestaSlots(monedas)} style={styles.btnTodoIn}>
+                <Text style={styles.txtBtnTodoIn}>TODO</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Botonera de la máquina */}
@@ -762,7 +1384,322 @@ export default function Casino() {
                 <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>{girandoSlots ? 'GIRANDO...' : 'TIRAR PALANCA'}</Text>
               </TouchableOpacity>
               <TouchableOpacity disabled={girandoSlots} style={styles.btnSalirAlLobby} onPress={() => { setJuegoSeleccionado(null); setMensajeSlots(''); }}>
-                <Text style={{ fontSize: 12, color: '#fff', fontWeight: 'bold' }}>SALIR AL MENÚ</Text>
+                <Text style={{ fontSize: 12, color: '#D1D5DB', fontWeight: 'bold' }}>← SALIR AL MENÚ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* JUEGO 4: DADOS — CRAPS SIMPLIFICADO */}
+        {juegoSeleccionado === 'dados' && (
+          <View style={styles.contenedorMesaFondoVerdeReal}>
+
+            {/* Cabecera del juego */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', marginBottom: 14 }}>
+              <Dices size={18} color="#F87171" />
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 1, flex: 1 }}>DADOS — CRAPS</Text>
+              <TouchableOpacity onPress={() => setModalAyuda('dados')} style={styles.btnAyuda}>
+                <Text style={styles.txtBtnAyuda}>?</Text>
+              </TouchableOpacity>
+              {dadosPunto !== null && (
+                <View style={{ backgroundColor: 'rgba(239,68,68,0.2)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(239,68,68,0.5)' }}>
+                  <Text style={{ color: '#F87171', fontWeight: '900', fontSize: 12 }}>PUNTO: {dadosPunto}</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Dados visuales */}
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 16 }}>
+              {[0, 1].map(i => (
+                <DadoVisual key={i} valor={dadosValores[i]} animando={dadosTirandose} />
+              ))}
+            </View>
+
+            {/* Suma */}
+            {dadosValores[0] !== null && (
+              <View style={{ alignItems: 'center', marginBottom: 10 }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>SUMA</Text>
+                <Text style={{ color: '#FEF08A', fontSize: 36, fontWeight: '900', lineHeight: 42 }}>{dadosValores[0] + dadosValores[1]}</Text>
+              </View>
+            )}
+
+            {/* Banner resultado */}
+            {dadosMensaje !== '' && (
+              <View style={[styles.bannerResultadoFino, {
+                backgroundColor: dadosResultadoTipo === 'ganado' ? 'rgba(5,150,105,0.15)' : dadosResultadoTipo === 'perdido' ? 'rgba(239,68,68,0.12)' : 'rgba(254,240,138,0.08)',
+                borderColor: dadosResultadoTipo === 'ganado' ? '#059669' : dadosResultadoTipo === 'perdido' ? '#EF4444' : '#EAB308',
+              }]}>
+                <Text style={[styles.txtBannerResultadoText, {
+                  color: dadosResultadoTipo === 'ganado' ? '#34D399' : dadosResultadoTipo === 'perdido' ? '#F87171' : '#FEF08A'
+                }]}>{dadosMensaje}</Text>
+              </View>
+            )}
+
+            {/* Info reglas rápidas */}
+            {dadosFase === 'inicio' && dadosMensaje === '' && (
+              <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 10, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 11, fontWeight: '600', textAlign: 'center', lineHeight: 18 }}>
+                  7 u 11 → ganas al instante · 2, 3 o 12 → pierde{'\n'}
+                  Otro número → se convierte en tu punto{'\n'}
+                  Saca el punto antes que el 7 para ganar
+                </Text>
+              </View>
+            )}
+
+            {/* Selector apuesta (solo en fase inicio) */}
+            {dadosFase === 'inicio' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginVertical: 10, gap: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#9CA3AF' }}>Apuesta:</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                  <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaDados(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
+                  <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{apuestaDados}</Text>
+                  <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaDados(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
+                </View>
+                <TouchableOpacity onPress={() => setApuestaDados(monedas)} style={styles.btnTodoIn}>
+                  <Text style={styles.txtBtnTodoIn}>TODO</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={{ gap: 6, paddingBottom: 4, marginTop: 6 }}>
+              <TouchableOpacity disabled={dadosTirandose} style={styles.btnOtraPartidaVerde} onPress={tirarDados}>
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 }}>
+                  {dadosTirandose ? 'RODANDO...' : dadosFase === 'punto' ? `TIRAR OTRA VEZ (PUNTO: ${dadosPunto})` : 'LANZAR DADOS'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnSalirAlLobby} onPress={() => { resetearDados(); setJuegoSeleccionado(null); }}>
+                <Text style={{ fontSize: 12, color: '#D1D5DB', fontWeight: 'bold' }}>← SALIR AL MENÚ</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* JUEGO 5: RASCA Y GANA */}
+        {juegoSeleccionado === 'rasca' && (
+          <View style={styles.contenedorMesaFondoVerdeReal}>
+
+            {/* Cabecera */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', marginBottom: 14 }}>
+              <AlertTriangle size={18} color="#34D399" />
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 1, flex: 1 }}>RASCA Y GANA</Text>
+              <TouchableOpacity onPress={() => setModalAyuda('rasca')} style={styles.btnAyuda}>
+                <Text style={styles.txtBtnAyuda}>?</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Fase: comprar cartón */}
+            {rascaFase === 'comprar' && (
+              <View style={{ alignItems: 'center', gap: 14 }}>
+                <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', alignItems: 'center', width: '100%' }}>
+                  <Text style={{ fontSize: 42, marginBottom: 8 }}>🎟️</Text>
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15, marginBottom: 4 }}>CARTÓN LA BODEGUILLA</Text>
+                  <Text style={{ color: '#9CA3AF', fontSize: 11, textAlign: 'center', lineHeight: 17 }}>6 casillas ocultas · 3 iguales hasta x50{'\n'}Par x2 · 💎×3 paga x50 · 💵×3 paga x30</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#9CA3AF' }}>Precio:</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                    <TouchableOpacity style={{ padding: 10 }} onPress={() => setRascaApuesta(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
+                    <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{rascaApuesta}</Text>
+                    <TouchableOpacity style={{ padding: 10 }} onPress={() => setRascaApuesta(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
+                  </View>
+                  <TouchableOpacity onPress={() => setRascaApuesta(monedas)} style={styles.btnTodoIn}>
+                    <Text style={styles.txtBtnTodoIn}>TODO</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity style={styles.btnIniciarJuegoPremium} onPress={comprarRasca}>
+                  <Text style={styles.txtBtnJuegoText}>🎟️ COMPRAR CARTÓN</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnSalirAlLobby} onPress={() => setJuegoSeleccionado(null)}>
+                  <Text style={{ fontSize: 12, color: '#D1D5DB', fontWeight: 'bold' }}>← SALIR AL MENÚ</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Fase: rascando / fin */}
+            {(rascaFase === 'rascando' || rascaFase === 'fin') && (
+              <View style={{ gap: 12 }}>
+
+                {/* Banner mensaje */}
+                <View style={[styles.bannerResultadoFino, {
+                  backgroundColor: rascaResultadoTipo === 'ganado' ? 'rgba(5,150,105,0.15)' : rascaResultadoTipo === 'perdido' ? 'rgba(239,68,68,0.12)' : 'rgba(254,240,138,0.06)',
+                  borderColor: rascaResultadoTipo === 'ganado' ? '#059669' : rascaResultadoTipo === 'perdido' ? '#EF4444' : 'rgba(255,255,255,0.1)',
+                }]}>
+                  <Text style={[styles.txtBannerResultadoText, {
+                    color: rascaResultadoTipo === 'ganado' ? '#34D399' : rascaResultadoTipo === 'perdido' ? '#F87171' : '#9CA3AF'
+                  }]}>{rascaMensaje}</Text>
+                </View>
+
+                {/* Grid 2x3 de casillas */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+                  {rascaCasillas.map((casilla, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      onPress={() => rascarCasilla(i)}
+                      disabled={casilla.revelada || rascaFase === 'fin'}
+                      style={[styles.casillaScratch, casilla.revelada && styles.casillaScratchRevelada]}
+                      activeOpacity={0.7}
+                    >
+                      {casilla.revelada ? (
+                        <Text style={{ fontSize: 34 }}>{casilla.simbolo}</Text>
+                      ) : (
+                        <Text style={{ fontSize: 26, color: 'rgba(255,255,255,0.3)' }}>?</Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                <View style={{ gap: 6 }}>
+                  {rascaFase === 'rascando' && (
+                    <TouchableOpacity style={styles.btnBlackjackFijoBlanco} onPress={rascaRevelarTodo}>
+                      <Text style={styles.txtBtnAccionSecundarioText}>REVELAR TODO</Text>
+                    </TouchableOpacity>
+                  )}
+                  {rascaFase === 'fin' && (
+                    <TouchableOpacity style={styles.btnOtraPartidaVerde} onPress={nuevaRasca}>
+                      <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>OTRO CARTÓN</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={styles.btnSalirAlLobby} onPress={() => { nuevaRasca(); setJuegoSeleccionado(null); }}>
+                    <Text style={{ fontSize: 12, color: '#D1D5DB', fontWeight: 'bold' }}>← SALIR AL MENÚ</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* JUEGO 6: WAR — CARTA ALTA */}
+        {juegoSeleccionado === 'war' && (
+          <View style={styles.contenedorMesaFondoVerdeReal}>
+
+            {/* Cabecera */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', marginBottom: 14 }}>
+              <Layers size={18} color="#FBBF24" />
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 1, flex: 1 }}>WAR — CARTA ALTA</Text>
+              <TouchableOpacity onPress={() => setModalAyuda('war')} style={styles.btnAyuda}>
+                <Text style={styles.txtBtnAyuda}>?</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Mesa de cartas */}
+            <View style={{ gap: 10, marginBottom: 14 }}>
+
+              {/* Carta crupier */}
+              <View style={{ alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>CRUPIER</Text>
+                {warAnimando ? (
+                  <View style={[styles.cartaWarSlot, { backgroundColor: '#2E1065', borderColor: 'rgba(196,181,253,0.5)' }]}>
+                    <Text style={{ fontSize: 32 }}>🂠</Text>
+                  </View>
+                ) : warCartaCrupier ? (
+                  <RenderizarCarta nombre={warCartaCrupier.nombre} palo={warCartaCrupier.palo} oculta={false} />
+                ) : (
+                  <View style={styles.cartaWarSlot}>
+                    <Text style={{ color: 'rgba(255,255,255,0.2)', fontSize: 28 }}>—</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Separador VS */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 2 }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+                <Text style={{ color: '#FBBF24', fontWeight: '900', fontSize: 13, letterSpacing: 2 }}>VS</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+              </View>
+
+              {/* Carta jugador */}
+              <View style={{ alignItems: 'center', gap: 6 }}>
+                <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>TÚ</Text>
+                {warAnimando ? (
+                  <View style={[styles.cartaWarSlot, { backgroundColor: '#2E1065', borderColor: 'rgba(196,181,253,0.5)' }]}>
+                    <Text style={{ fontSize: 32 }}>🂠</Text>
+                  </View>
+                ) : warCartaJugador ? (
+                  <RenderizarCarta nombre={warCartaJugador.nombre} palo={warCartaJugador.palo} oculta={false} />
+                ) : (
+                  <View style={styles.cartaWarSlot}>
+                    <Text style={{ color: 'rgba(255,255,255,0.2)', fontSize: 28 }}>—</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Cartas de la guerra (si las hay) */}
+            {warCartasGuerra && (
+              <View style={{ backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: 'rgba(239,68,68,0.3)', marginBottom: 10 }}>
+                <Text style={{ color: '#F87171', fontSize: 10, fontWeight: '800', letterSpacing: 1.5, textAlign: 'center', marginBottom: 8 }}>⚔️ CARTA DECISIVA</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20 }}>
+                  <View style={{ alignItems: 'center', gap: 4 }}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 9, fontWeight: '700' }}>TÚ</Text>
+                    <RenderizarCarta nombre={warCartasGuerra.jugador.nombre} palo={warCartasGuerra.jugador.palo} oculta={false} />
+                  </View>
+                  <View style={{ alignItems: 'center', gap: 4 }}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 9, fontWeight: '700' }}>CRUPIER</Text>
+                    <RenderizarCarta nombre={warCartasGuerra.crupier.nombre} palo={warCartasGuerra.crupier.palo} oculta={false} />
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Banner resultado */}
+            {warMensaje !== '' && (
+              <View style={[styles.bannerResultadoFino, {
+                backgroundColor: warResultadoTipo === 'ganado' ? 'rgba(5,150,105,0.15)' : warResultadoTipo === 'perdido' ? 'rgba(239,68,68,0.12)' : 'rgba(245,158,11,0.1)',
+                borderColor: warResultadoTipo === 'ganado' ? '#059669' : warResultadoTipo === 'perdido' ? '#EF4444' : '#F59E0B',
+                marginBottom: 12,
+              }]}>
+                <Text style={[styles.txtBannerResultadoText, {
+                  color: warResultadoTipo === 'ganado' ? '#34D399' : warResultadoTipo === 'perdido' ? '#F87171' : '#FBBF24',
+                }]}>{warMensaje}</Text>
+              </View>
+            )}
+
+            {/* Selector apuesta (solo en inicio) */}
+            {warFase === 'inicio' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12, gap: 8 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#9CA3AF' }}>Apuesta:</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
+                  <TouchableOpacity style={{ padding: 10 }} onPress={() => setWarApuesta(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
+                  <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{warApuesta}</Text>
+                  <TouchableOpacity style={{ padding: 10 }} onPress={() => setWarApuesta(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
+                </View>
+                <TouchableOpacity onPress={() => setWarApuesta(monedas)} style={styles.btnTodoIn}>
+                  <Text style={styles.txtBtnTodoIn}>TODO</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Botones según fase */}
+            <View style={{ gap: 6 }}>
+              {warFase === 'inicio' && (
+                <TouchableOpacity disabled={warAnimando} style={styles.btnOtraPartidaVerde} onPress={jugarWar}>
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 }}>
+                    {warAnimando ? 'REPARTIENDO...' : '⚔️ REPARTIR CARTAS'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {warFase === 'empate' && (
+                <>
+                  <TouchableOpacity disabled={warAnimando} style={styles.btnBlackjackFijoMorado} onPress={irAGuerra}>
+                    <Text style={styles.txtBtnAccionPrincipalText}>
+                      {warAnimando ? 'EN GUERRA...' : `⚔️ IR A LA GUERRA (doblar: ${warApuesta * 2})`}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.btnBlackjackFijoBlanco} onPress={rendirse}>
+                    <Text style={styles.txtBtnAccionSecundarioText}>🏳️ RENDIRSE (-{Math.floor(warApuesta / 2)} monedas)</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {warFase === 'fin' && (
+                <TouchableOpacity style={styles.btnOtraPartidaVerde} onPress={() => { resetearWar(); }}>
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>NUEVA MANO</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity style={styles.btnSalirAlLobby} onPress={() => { resetearWar(); setJuegoSeleccionado(null); }}>
+                <Text style={{ fontSize: 12, color: '#D1D5DB', fontWeight: 'bold' }}>← SALIR AL MENÚ</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -774,81 +1711,116 @@ export default function Casino() {
 }
 
 const styles = StyleSheet.create({
-  tableroCasinoPremium: { backgroundColor: '#1E3A1E', borderRadius: 0, borderWidth: 3, borderColor: '#451A60', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 6, elevation: 5, width: '100%', overflow: 'hidden' },
-  cabeceraCasinoMesa: { flexDirection: 'row', backgroundColor: '#451A60', width: '100%', padding: 12, alignItems: 'center', justifyContent: 'space-between' },
-  txtMesaPremiumTitulo: { color: '#fff', fontSize: 14, fontWeight: '900', letterSpacing: 1.2 },
+  // === CONTENEDOR PRINCIPAL ===
+  tableroCasinoPremium: { backgroundColor: '#0F1923', borderRadius: 0, borderWidth: 2, borderColor: '#2A1A40', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6, width: '100%', overflow: 'hidden' },
 
-  lobbyCasinoListaVertical: { width: '100%', padding: 16, backgroundColor: '#1E3A1E', gap: 12 },
-  tarjetaJuegoRectangularGris: { width: '100%', backgroundColor: '#E5E5EA', borderRadius: 12, padding: 16, justifyContent: 'center', borderWidth: 1, borderColor: '#D1D1D6', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
-  txtTituloTarjetaJuego: { color: '#1C1C1E', fontWeight: '900', fontSize: 16, textAlign: 'left' },
-  miniContenedorRachasFila: { flexDirection: 'row', gap: 16, marginTop: 8, marginLeft: 4 },
-  txtMiniRachaText: { color: '#444', fontSize: 11, fontWeight: '800' },
+  // === HEADER ===
+  cabeceraCasinoMesa: { flexDirection: 'row', backgroundColor: '#1A0A2E', width: '100%', paddingHorizontal: 16, paddingVertical: 13, alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(254,240,138,0.15)' },
+  txtMesaPremiumTitulo: { color: '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 2, textTransform: 'uppercase' },
+  hudMonedasPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(254,240,138,0.12)', paddingVertical: 5, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(254,240,138,0.3)' },
 
-  lobbyCasinoCaja: { padding: 20, alignItems: 'center', justifyContent: 'center', width: '100%', backgroundColor: '#1E3A1E', gap: 14 },
-  tarjetaBlancaLobbyBase: { width: '100%', borderWidth: 1, borderColor: '#E5E5EA', borderRadius: 12, padding: 16, backgroundColor: '#F4F4F6', alignItems: 'center' },
+  // === LOBBY ===
+  lobbyCasinoListaVertical: { width: '100%', padding: 14, backgroundColor: '#0F1923', gap: 10 },
+  tarjetaJuegoRectangularGris: { width: '100%', backgroundColor: '#1C1130', borderRadius: 14, padding: 14, justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(91,50,129,0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 5, elevation: 3 },
+  iconoTarjetaCirculo: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(254,240,138,0.1)', borderWidth: 1, borderColor: 'rgba(254,240,138,0.25)', alignItems: 'center', justifyContent: 'center' },
+  txtTituloTarjetaJuego: { color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 0.5 },
+  txtSubtituloTarjetaJuego: { color: '#6B7280', fontSize: 11, fontWeight: '500', marginTop: 2 },
+  flechaTarjeta: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(254,240,138,0.08)', alignItems: 'center', justifyContent: 'center' },
+  miniContenedorRachasFila: { flexDirection: 'row', gap: 12, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.06)', alignItems: 'center' },
+  txtMiniRachaText: { color: '#9CA3AF', fontSize: 11, fontWeight: '700' },
 
-  btnIniciarJuegoPremium: { backgroundColor: '#5B3281', paddingVertical: 12, paddingHorizontal: 28, borderRadius: 25, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3, elevation: 3, width: '100%', alignItems: 'center' },
-  txtBtnJuegoText: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5, textAlign: 'center' },
-  btnRegresarLobbyMenu: { width: '100%', padding: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1.5, borderColor: '#5B3281', marginTop: 4 },
+  // === PANTALLA PREVIA BLACKJACK ===
+  lobbyCasinoCaja: { padding: 16, alignItems: 'center', justifyContent: 'center', width: '100%', backgroundColor: '#0F1923', gap: 14 },
+  tarjetaBlancaLobbyBase: { width: '100%', borderWidth: 1, borderColor: 'rgba(91,50,129,0.5)', borderRadius: 14, padding: 18, backgroundColor: '#1C1130', alignItems: 'center' },
 
-  cajaEstadisticasRachas: { backgroundColor: '#ffffff', width: '90%', borderRadius: 8, padding: 8, marginVertical: 6, borderWidth: 1, borderColor: '#E5E5EA', gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 1, elevation: 1 },
-  filaRachaStat: { flexDirection: 'row', alignItems: 'center', width: '100%', paddingHorizontal: 4 },
-  txtRachaStatLabel: { flex: 1, fontSize: 12, fontWeight: '600', color: '#555', marginLeft: 6 },
-  txtRachaStatValor: { fontSize: 14, fontWeight: '900', color: '#1C1C1E' },
+  btnIniciarJuegoPremium: { backgroundColor: '#7C3AED', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 12, width: '100%', alignItems: 'center', borderBottomWidth: 3, borderColor: '#5B21B6' },
+  txtBtnJuegoText: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 1 },
+  btnRegresarLobbyMenu: { width: '100%', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 6 },
 
-  contenedorMesaFondoVerdeReal: { width: '100%', padding: 14, backgroundColor: '#1E3A1E' },
+  cajaEstadisticasRachas: { backgroundColor: 'rgba(0,0,0,0.25)', width: '100%', borderRadius: 10, padding: 12, marginVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', gap: 4 },
+  filaRachaStat: { flexDirection: 'row', alignItems: 'center', width: '100%', paddingHorizontal: 2 },
+  txtRachaStatLabel: { flex: 1, fontSize: 12, fontWeight: '600', color: '#9CA3AF', marginLeft: 8 },
+  txtRachaStatValor: { fontSize: 15, fontWeight: '900', color: '#FEF08A' },
+
+  // === MESA BLACKJACK ===
+  contenedorMesaFondoVerdeReal: { width: '100%', padding: 14, backgroundColor: '#0F1923' },
   zonaJugadorFila: { width: '100%', paddingVertical: 8, alignItems: 'center' },
-  txtMarcadorEtiqueta: { color: '#E2D5EE', fontSize: 11, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },
+  txtMarcadorEtiqueta: { color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4, textTransform: 'uppercase' },
   filaCartasContenedor: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', minHeight: 85, alignItems: 'center', width: '100%', marginTop: 4 },
-  lineaMesaSeparador: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', alignSelf: 'center', marginVertical: 4, borderStyle: 'dashed', borderRadius: 1 },
+  lineaMesaSeparador: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', alignSelf: 'center', marginVertical: 4 },
 
-  cartaEstilo: { backgroundColor: '#fff', width: 56, height: 84, borderRadius: 6, justifyContent: 'space-between', padding: 5, marginHorizontal: 4, marginVertical: 4, borderWidth: 1, borderColor: '#BBB', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 3 },
+  cartaEstilo: { backgroundColor: '#fff', width: 56, height: 84, borderRadius: 8, justifyContent: 'space-between', padding: 5, marginHorizontal: 4, marginVertical: 4, borderWidth: 1, borderColor: '#D1D5DB', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
   textoCartaEsquina: { fontSize: 13, fontWeight: '900', lineHeight: 13 },
   paloCartaEsquina: { fontSize: 11, lineHeight: 11, marginTop: 1 },
   paloCartaCentral: { fontSize: 24, textAlign: 'center', alignSelf: 'center', marginVertical: -4 },
-  bannerResultadoFino: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 10, borderWidth: 1.5, marginVertical: 10, width: '100%', minHeight: 46 },
-  txtBannerResultadoText: { fontSize: 14, fontWeight: '800', textAlign: 'center', flex: 1 },
+  bannerResultadoFino: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 12, borderRadius: 10, borderWidth: 1.5, marginVertical: 8, width: '100%', minHeight: 46 },
+  txtBannerResultadoText: { fontSize: 13, fontWeight: '800', textAlign: 'center', flex: 1 },
 
-  btnBlackjackFijoBlanco: { backgroundColor: '#E5E5EA', paddingVertical: 14, width: '100%', borderRadius: 10, alignItems: 'center', borderBottomWidth: 2, borderColor: '#CCC' },
-  txtBtnAccionSecundarioText: { color: '#1C1C1E', fontWeight: '900', fontSize: 13 },
-  btnBlackjackFijoMorado: { backgroundColor: '#451A60', paddingVertical: 14, width: '100%', borderRadius: 10, alignItems: 'center', borderBottomWidth: 2, borderColor: '#290E3B' },
-  txtBtnAccionPrincipalText: { color: '#fff', fontWeight: '900', fontSize: 13 },
+  // === BOTONES BLACKJACK ===
+  btnBlackjackFijoBlanco: { backgroundColor: '#374151', paddingVertical: 14, width: '100%', borderRadius: 12, alignItems: 'center', borderBottomWidth: 3, borderColor: '#1F2937' },
+  txtBtnAccionSecundarioText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 0.5 },
+  btnBlackjackFijoMorado: { backgroundColor: '#7C3AED', paddingVertical: 14, width: '100%', borderRadius: 12, alignItems: 'center', borderBottomWidth: 3, borderColor: '#5B21B6' },
+  txtBtnAccionPrincipalText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 0.5 },
 
-  btnOtraPartidaVerde: { backgroundColor: '#10B981', paddingVertical: 14, width: '100%', borderRadius: 10, alignItems: 'center', borderBottomWidth: 2, borderColor: '#059669' },
+  btnOtraPartidaVerde: { backgroundColor: '#059669', paddingVertical: 14, width: '100%', borderRadius: 12, alignItems: 'center', borderBottomWidth: 3, borderColor: '#047857' },
   txtBtnOtraPartidaText: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 },
-  btnSalirAlLobby: { flexDirection: 'row', backgroundColor: '#EF4444', paddingVertical: 12, width: '100%', borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderColor: '#DC2626' },
-  txtBtnSalirLobbyText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  btnSalirAlLobby: { flexDirection: 'row', backgroundColor: '#374151', paddingVertical: 12, width: '100%', borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderBottomWidth: 2, borderColor: '#1F2937' },
+  txtBtnSalirLobbyText: { color: '#D1D5DB', fontWeight: '700', fontSize: 13 },
 
-  btnCasinoAccionSecundario: { backgroundColor: '#E5E5EA', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10, flex: 1, alignItems: 'center' },
+  btnCasinoAccionSecundario: { backgroundColor: '#374151', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 12, flex: 1, alignItems: 'center', borderBottomWidth: 2, borderColor: '#1F2937' },
 
-  hudContenedorRuletaAmpliado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10 },
-  circuloResultadoRuletaGigante: { width: 75, height: 75, borderRadius: 37.5, justifyContent: 'center', alignItems: 'center', borderWidth: 3.5, borderColor: '#FEF08A' },
+  // === RULETA ===
+  hudContenedorRuletaAmpliado: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 12, marginBottom: 8 },
+  circuloResultadoRuletaGigante: { width: 75, height: 75, borderRadius: 37.5, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#FEF08A' },
   txtResultadoRuletaNumeroGigante: { color: '#fff', fontSize: 32, fontWeight: '900' },
-  tapeteGridFichasAmpliado: { width: '100%', backgroundColor: '#166534', padding: 6, borderRadius: 10 },
-  casillaCeroVerticalAmpliada: { width: 40, height: 104, backgroundColor: '#15803d', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', borderRadius: 4, marginRight: 3 },
-  txtCasillaTapeteTxtAmpliado: { color: '#fff', fontSize: 13, fontWeight: '900' },
-  btnSuerteSencillaTapete: { flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: '#3f6212' },
-  badgeFichaColocadaAmpliada: { position: 'absolute', right: 2, bottom: 2, backgroundColor: '#FEF08A', borderRadius: 7, minWidth: 16, alignItems: 'center' },
-  contenedorFichasFisicasAmpliado: { paddingVertical: 10, backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 10, alignItems: 'center', marginVertical: 6 },
-  fichaFisicaCirculo: { justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#94a3b8', backgroundColor: '#e2e8f0' },
-  fichaFisicaCirculoActiva: { borderColor: '#FEF08A', backgroundColor: '#451A60' },
+  tapeteGridFichasAmpliado: { width: '100%', backgroundColor: '#14532D', padding: 6, borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  casillaCeroVerticalAmpliada: { width: 40, height: 104, backgroundColor: '#166534', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 4, marginRight: 3 },
+  txtCasillaTapeteTxtAmpliado: { color: '#fff', fontSize: 12, fontWeight: '900' },
+  btnSuerteSencillaTapete: { flex: 1, justifyContent: 'center', alignItems: 'center', borderRadius: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', backgroundColor: '#166534' },
+  badgeFichaColocadaAmpliada: { position: 'absolute', right: 2, bottom: 2, backgroundColor: '#FEF08A', borderRadius: 7, minWidth: 16, alignItems: 'center', paddingHorizontal: 2 },
+  contenedorFichasFisicasAmpliado: { paddingVertical: 12, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, alignItems: 'center', marginVertical: 6, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+  fichaFisicaCirculo: { justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#4B5563', backgroundColor: '#1F2937' },
+  fichaFisicaCirculoActiva: { borderColor: '#FEF08A', backgroundColor: '#7C3AED' },
   overlayResultadoTranslucido: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 999 },
-  contenedorCentralOverlay: { backgroundColor: 'rgba(0, 0, 0, 0.88)', padding: 30, borderRadius: 16, alignItems: 'center', borderWidth: 2, borderColor: '#FEF08A', width: '80%' },
+  contenedorCentralOverlay: { backgroundColor: 'rgba(15, 10, 30, 0.95)', padding: 30, borderRadius: 20, alignItems: 'center', borderWidth: 2, borderColor: '#FEF08A', width: '80%' },
   circuloResultadoRuletaGrande: { justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#FEF08A', marginBottom: 16 },
   txtOverlayNumeroGigante: { color: '#fff', fontSize: 42, fontWeight: '900' },
   txtOverlayMensajePremio: { color: '#fff', fontSize: 20, fontWeight: '900', textAlign: 'center', lineHeight: 28 },
-  txtOverlaySubtituloToque: { color: '#8E8E93', fontSize: 11, fontWeight: '600', marginTop: 20, textTransform: 'uppercase', letterSpacing: 1 },
+  txtOverlaySubtituloToque: { color: '#6B7280', fontSize: 11, fontWeight: '600', marginTop: 20, textTransform: 'uppercase', letterSpacing: 1 },
 
-  // Estilos Mueble Slot Machine Vintage
-  chasisTragaperrasMueble: { width: '100%', backgroundColor: '#2D3748', borderRadius: 16, padding: 12, borderWidth: 4, borderColor: '#1A202C', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 6, elevation: 8 },
-  marquesinaLuminosa: { width: '100%', backgroundColor: '#4C1D95', paddingVertical: 8, alignItems: 'center', borderRadius: 8, borderWidth: 2, borderColor: '#FEF08A', marginBottom: 12 },
-  txtMarquesinaTitulo: { color: '#FEF08A', fontWeight: '900', fontSize: 16, letterSpacing: 2, textShadowColor: 'rgba(254, 240, 138, 0.5)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 6 },
-  pantallaRodillosNeon: { width: '100%', backgroundColor: '#111827', borderRadius: 10, padding: 14, borderWidth: 3, borderColor: '#EAB308', shadowColor: '#EAB308', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
-  contenedorRodillosRow: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
-  cajaRodilloFisico: { width: 72, height: 85, backgroundColor: '#FFFBEB', borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#78350F' },
-  txtEmojiRodillo: { fontSize: 38 },
-  tablaPagosMueble: { width: '100%', backgroundColor: '#1F2937', padding: 8, borderRadius: 6, marginTop: 10, alignItems: 'center', borderWidth: 1, borderColor: '#4B5563' },
-  txtTablaPagosTitulo: { color: '#EAB308', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
-  txtTablaPagosLinea: { color: '#F3F4F6', fontSize: 10, fontWeight: '700', marginTop: 2 },
-  txtTablaPagosMiniNota: { color: '#9CA3AF', fontSize: 9, fontWeight: '500', marginTop: 2, fontStyle: 'italic' }
+  // === TRAGAPERRAS ===
+  chasisTragaperrasMueble: { width: '100%', backgroundColor: '#1C1130', borderRadius: 16, padding: 14, borderWidth: 2, borderColor: '#2E1065', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 8 },
+  marquesinaLuminosa: { width: '100%', backgroundColor: '#4C1D95', paddingVertical: 10, alignItems: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: '#FEF08A', marginBottom: 14 },
+  txtMarquesinaTitulo: { color: '#FEF08A', fontWeight: '900', fontSize: 15, letterSpacing: 3, textShadowColor: 'rgba(254, 240, 138, 0.6)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8 },
+  pantallaRodillosNeon: { width: '100%', backgroundColor: '#0D0D0D', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#EAB308', shadowColor: '#EAB308', shadowOpacity: 0.4, shadowRadius: 6, elevation: 5 },
+  contenedorRodillosRow: { flexDirection: 'row', justifyContent: 'center', gap: 14 },
+  cajaRodilloFisico: { width: 76, height: 88, backgroundColor: '#1F1F1F', borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#EAB308' },
+  txtEmojiRodillo: { fontSize: 40 },
+  tablaPagosMueble: { width: '100%', backgroundColor: '#0D0D0D', padding: 10, borderRadius: 8, marginTop: 12, alignItems: 'center', borderWidth: 1, borderColor: '#292524' },
+  txtTablaPagosTitulo: { color: '#EAB308', fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
+  txtTablaPagosLinea: { color: '#D1D5DB', fontSize: 10, fontWeight: '700', marginTop: 4 },
+  txtTablaPagosMiniNota: { color: '#6B7280', fontSize: 9, fontWeight: '500', marginTop: 3, fontStyle: 'italic' },
+
+  // Estilo extra para la casilla del tapete
+  casillaTapeteNumero: { justifyContent: 'center', alignItems: 'center', borderRadius: 3 },
+
+  // === DADOS ===
+  cajaDado: { width: 88, height: 88, backgroundColor: '#1C1130', borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(248,113,113,0.4)', shadowColor: '#F87171', shadowOpacity: 0.2, shadowRadius: 6, elevation: 4 },
+  cajaDadoAnimando: { borderColor: '#F87171', shadowOpacity: 0.5 },
+  txtEmojidado: { fontSize: 52 },
+
+  // === RASCA Y GANA ===
+  casillaScratch: { width: 96, height: 96, backgroundColor: '#2E1065', borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(167,139,250,0.4)', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
+  casillaScratchRevelada: { backgroundColor: '#1C1130', borderColor: 'rgba(52,211,153,0.4)' },
+
+  // === BOTÓN AYUDA ? ===
+  btnAyuda: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(254,240,138,0.12)', borderWidth: 1, borderColor: 'rgba(254,240,138,0.35)', justifyContent: 'center', alignItems: 'center' },
+  txtBtnAyuda: { color: '#FEF08A', fontWeight: '900', fontSize: 13, lineHeight: 16 },
+
+  // === WAR ===
+  cartaWarSlot: { width: 56, height: 84, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+
+  // === BOTÓN TODO IN ===
+  btnTodoIn: { backgroundColor: 'rgba(239,68,68,0.15)', borderWidth: 1, borderColor: 'rgba(239,68,68,0.4)', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 10 },
+  txtBtnTodoIn: { color: '#F87171', fontWeight: '900', fontSize: 11, letterSpacing: 0.5 },
 });
