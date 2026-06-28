@@ -54,6 +54,10 @@ function ContenidoApp() {
   const [nuevoProdCategoria, setNuevoProdCategoria] = useState('Bebidas');
   const [nuevoProdMinimo, setNuevoProdMinimo] = useState('2');
 
+  // Gestion: edicion de stock minimo inline
+  const [editandoMinimo, setEditandoMinimo] = useState(null);
+  const [inputMinimo, setInputMinimo] = useState('');
+
   const cargarDatos = async () => {
     try {
       setCargando(true);
@@ -247,6 +251,16 @@ function ContenidoApp() {
     finally { setCargando(false); }
   };
 
+  const guardarMinimoEditado = async (id) => {
+    const num = parseInt(inputMinimo, 10);
+    if (isNaN(num) || num < 0) { setEditandoMinimo(null); return; }
+    try {
+      await supabase.from('productos').update({ stock_minimo: num }).eq('id', id);
+      setEditandoMinimo(null);
+      await cargarDatos();
+    } catch (error) { console.error(error.message); }
+  };
+
   const generarListaCompraAgrupada = () => {
     const list = {};
     extras.forEach(e => {
@@ -292,6 +306,27 @@ function ContenidoApp() {
           {/* ALACENA */}
           {pestanaActual === 'visual' && (
             <View style={{ flex: 1 }}>
+              {/* Resumen rapido */}
+              <View style={s.resumenBar}>
+                <View style={s.resumenItem}>
+                  <Text style={s.resumenNum}>{productos.length}</Text>
+                  <Text style={s.resumenLbl}>ARTICULOS</Text>
+                </View>
+                <View style={s.resumenDivider} />
+                <View style={s.resumenItem}>
+                  <Text style={[s.resumenNum, productosEnAlerta > 0 && { color: C.danger }]}>
+                    {productosEnAlerta}
+                  </Text>
+                  <Text style={s.resumenLbl}>EN ALERTA</Text>
+                </View>
+                <View style={s.resumenDivider} />
+                <View style={s.resumenItem}>
+                  <Text style={[s.resumenNum, { color: C.success }]}>
+                    {productos.length - productosEnAlerta}
+                  </Text>
+                  <Text style={s.resumenLbl}>BIEN</Text>
+                </View>
+              </View>
               <View style={s.filterBar}>
                 <FlatList
                   data={CATEGORIAS}
@@ -487,16 +522,28 @@ function ContenidoApp() {
               ) : (
                 Object.entries(generarListaCompraAgrupada()).map(([tienda, items]) => (
                   <View key={tienda} style={s.bloqueTienda}>
-                    <Text style={s.bloqueTiendaTitulo}>{tienda.toUpperCase()}</Text>
+                    <View style={s.bloqueTiendaHeader}>
+                      <Text style={s.bloqueTiendaTitulo}>{tienda.toUpperCase()}</Text>
+                      <View style={s.bloqueTiendaCount}>
+                        <Text style={s.bloqueTiendaCountTxt}>{items.length}</Text>
+                      </View>
+                    </View>
                     {items.map(item => (
                       <View key={item.id} style={s.itemCompra}>
                         <Text style={s.itemCompraTxt} numberOfLines={1}>{item.nombre}</Text>
                         <View style={s.itemCompraAcciones}>
-                          <TouchableOpacity onPress={() => procesarCompraCompletada(item.id, item.nombre)}>
-                            <CheckSquare color={C.success} size={20} />
+                          <TouchableOpacity
+                            style={s.btnComprado}
+                            onPress={() => procesarCompraCompletada(item.id, item.nombre)}
+                          >
+                            <CheckSquare color={C.white} size={17} />
+                            <Text style={s.btnCompradoTxt}>COMPRADO</Text>
                           </TouchableOpacity>
-                          <TouchableOpacity onPress={() => eliminarExtraSinSumar(item.id)}>
-                            <Trash2 color={C.danger} size={18} />
+                          <TouchableOpacity
+                            style={s.btnBorrarItem}
+                            onPress={() => eliminarExtraSinSumar(item.id)}
+                          >
+                            <Trash2 color={C.textMuted} size={16} />
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -556,12 +603,32 @@ function ContenidoApp() {
               <View style={s.bloqueTienda}>
                 <Text style={s.bloqueTiendaTitulo}>ARTICULOS EXISTENTES</Text>
                 {productos.map(p => (
-                  <View key={p.id} style={s.itemCompra}>
+                  <View key={p.id} style={s.gestionItem}>
                     <View style={{ flex: 1 }}>
                       <Text style={s.itemCompraTxt}>{p.nombre}</Text>
-                      <Text style={s.cardSub}>{p.categoria}  {'\u00B7'}  Min: {p.stock_minimo}</Text>
+                      <Text style={s.cardSub}>{p.categoria}</Text>
                     </View>
-                    <TouchableOpacity onPress={() => eliminarProductoInventario(p.id, p.nombre)}>
+                    {/* Minimo editable inline */}
+                    <View style={s.gestionMinimoWrap}>
+                      <Text style={s.gestionMinimoLbl}>MIN</Text>
+                      {editandoMinimo === p.id ? (
+                        <TextInput
+                          style={s.gestionMinimoInput}
+                          keyboardType="numeric"
+                          value={inputMinimo}
+                          onChangeText={setInputMinimo}
+                          onBlur={() => guardarMinimoEditado(p.id)}
+                          onSubmitEditing={() => guardarMinimoEditado(p.id)}
+                          autoFocus
+                          selectTextOnFocus
+                        />
+                      ) : (
+                        <TouchableOpacity onPress={() => { setEditandoMinimo(p.id); setInputMinimo(String(p.stock_minimo)); }}>
+                          <Text style={s.gestionMinimoVal}>{p.stock_minimo}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <TouchableOpacity style={{ paddingLeft: 14 }} onPress={() => eliminarProductoInventario(p.id, p.nombre)}>
                       <Trash2 color={C.danger} size={16} />
                     </TouchableOpacity>
                   </View>
@@ -753,7 +820,7 @@ const s = StyleSheet.create({
   },
   bloqueTiendaTitulo: {
     fontSize: 10, fontWeight: '800', color: C.accent,
-    letterSpacing: 2, marginBottom: 12,
+    letterSpacing: 2,
   },
   itemCompra: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
@@ -763,6 +830,56 @@ const s = StyleSheet.create({
   itemCompraAcciones: { flexDirection: 'row', gap: 16, alignItems: 'center' },
 
   emptyTxt: { color: C.textMuted, textAlign: 'center', marginTop: 40, fontSize: 14 },
+
+  // Resumen alacena
+  resumenBar: {
+    flexDirection: 'row', backgroundColor: C.surface,
+    borderBottomWidth: 1, borderColor: C.border,
+    paddingVertical: 14,
+  },
+  resumenItem:    { flex: 1, alignItems: 'center' },
+  resumenNum:     { fontSize: 26, fontWeight: '900', color: C.accent },
+  resumenLbl:     { fontSize: 9, fontWeight: '800', color: C.textMuted, letterSpacing: 1.2, marginTop: 2 },
+  resumenDivider: { width: 1, backgroundColor: C.border, marginVertical: 4 },
+
+  // Compra: botones de item mejorados
+  bloqueTiendaHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: 12,
+  },
+  bloqueTiendaCount: {
+    backgroundColor: C.accentDim, paddingHorizontal: 8,
+    paddingVertical: 3, borderRadius: 10,
+  },
+  bloqueTiendaCountTxt: { color: C.accent, fontSize: 11, fontWeight: '800' },
+  btnComprado: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: C.success, paddingHorizontal: 10,
+    paddingVertical: 7, borderRadius: 7,
+  },
+  btnCompradoTxt: { color: C.white, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  btnBorrarItem: {
+    padding: 7, borderRadius: 7,
+    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+  },
+
+  // Gestion: edicion inline de minimo
+  gestionItem: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, borderBottomWidth: 1, borderColor: C.border,
+  },
+  gestionMinimoWrap: { alignItems: 'center', marginLeft: 8 },
+  gestionMinimoLbl:  { fontSize: 8, fontWeight: '800', color: C.textMuted, letterSpacing: 1, marginBottom: 2 },
+  gestionMinimoVal: {
+    fontSize: 16, fontWeight: '900', color: C.accent,
+    minWidth: 28, textAlign: 'center',
+    borderBottomWidth: 1, borderColor: C.accentDim, paddingBottom: 1,
+  },
+  gestionMinimoInput: {
+    fontSize: 16, fontWeight: '900', color: C.accent,
+    width: 40, textAlign: 'center', padding: 0,
+    borderBottomWidth: 1, borderColor: C.accent,
+  },
 
   // Tab bar
   tabBar: {
