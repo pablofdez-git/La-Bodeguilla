@@ -58,22 +58,23 @@ const AYUDA_TEXTOS = {
       { icono: '🛒', texto: 'Compras un cartón al precio que elijas (10–50 monedas).' },
       { icono: '👆', texto: 'Toca cada casilla para revelarla una a una.' },
       { icono: '⚡', texto: 'REVELAR TODO destapa todas las casillas de golpe.' },
-      { icono: '✌️', texto: 'PAR (2 iguales en las 6 casillas): x2 la apuesta.' },
-      { icono: '🏆', texto: 'TRIFECTA (3 iguales): x15 mínimo.' },
-      { icono: '💎', texto: '💎×3 → x50 · 💵×3 → x30 · resto ×3 → x15.' },
+      { icono: '✌️', texto: 'PAR (2 iguales en las 6 casillas): x4 la apuesta.' },
+      { icono: '🏆', texto: 'TRIFECTA (3 iguales): x20 mínimo.' },
+      { icono: '💎', texto: '💎×3 → x80 · 💵×3 → x40 · resto ×3 → x20.' },
     ],
-    pagos: '· Par → x2  · Trifecta → x15 hasta x50',
+    pagos: '· Par → x4  · Trifecta → x20 hasta x80',
   },
   war: {
     titulo: '⚔️ War — Carta Alta',
     reglas: [
-      { icono: '🃏', texto: 'Tú y el crupier recibís una carta cada uno.' },
-      { icono: '🏆', texto: 'La carta más alta gana. Ganas x2 tu apuesta.' },
-      { icono: '⚔️', texto: 'EMPATE: puedes ir a la GUERRA (doblas apuesta) o rendirte (pierdes la mitad).' },
-      { icono: '🔥', texto: 'En la GUERRA se reparten 3 cartas quemadas y una decisiva. Gana el mayor.' },
+      { icono: '🃏', texto: 'Tú y el crupier recibís 3 cartas cada uno.' },
+      { icono: '👑', texto: 'Gana quien tenga la carta más alta entre sus 3.' },
+      { icono: '🏆', texto: 'Si ganas: cobras x3 tu apuesta.' },
+      { icono: '⚔️', texto: 'EMPATE en carta alta: puedes ir a LA GUERRA (pagas otra apuesta igual) o rendirte (recuperas la mitad).' },
+      { icono: '🔥', texto: 'En la GUERRA se reparte una carta decisiva. Si ganas cobras x6. Si pierdes, pierdes todo.' },
       { icono: '🂡', texto: 'Orden: A > K > Q > J > 10 > ... > 2. El As es siempre el más alto.' },
     ],
-    pagos: '· Victoria → x2  · Guerra ganada → x2 apuesta doble  · Rendirse → -mitad',
+    pagos: '· Victoria → x3  · Guerra ganada → x6 (sobre apuesta doble)  · Rendirse → -mitad',
   },
 };
 
@@ -801,7 +802,7 @@ export default function Casino() {
   };
 
   // ─── LÓGICA RASCA Y GANA ─────────────────────────────────────────────────────
-  // 9 símbolos para que sea mucho más difícil hacer pares/tríos al azar
+  // 9 símbolos para controlar bien las probabilidades
   const SIMBOLOS_RASCA = ['🍺', '🍷', '🥩', '💎', '💵', '🃏', '🎯', '🍋', '🔔'];
 
   const comprarRasca = () => {
@@ -816,35 +817,24 @@ export default function Casino() {
     const rand = Math.random();
     let simbolos;
 
-    if (rand < 0.02) {
-      // 2% — trifecta: un símbolo aparece exactamente 3 veces, los otros 3 son distintos entre sí y distintos al ganador
+    if (rand < 0.08) {
+      // 8% — trifecta: exactamente 3 iguales, los otros 3 todos distintos entre sí y distintos al ganador
       const ganador = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
-      const resto = SIMBOLOS_RASCA.filter(s => s !== ganador);
-      // Mezclar resto y coger 3 distintos
-      for (let i = resto.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [resto[i], resto[j]] = [resto[j], resto[i]];
-      }
+      const resto = [...SIMBOLOS_RASCA.filter(s => s !== ganador)].sort(() => Math.random() - 0.5);
       simbolos = [ganador, ganador, ganador, resto[0], resto[1], resto[2]];
 
-    } else if (rand < 0.20) {
-      // 18% — par exacto: un símbolo aparece exactamente 2 veces, los otros 4 son todos distintos entre sí y distintos al ganador
+    } else if (rand < 0.43) {
+      // 35% — par exacto: exactamente 2 iguales, los otros 4 todos distintos entre sí y al ganador
       const ganador = SIMBOLOS_RASCA[Math.floor(Math.random() * SIMBOLOS_RASCA.length)];
-      const resto = SIMBOLOS_RASCA.filter(s => s !== ganador);
-      for (let i = resto.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [resto[i], resto[j]] = [resto[j], resto[i]];
-      }
-      // 4 distintos del resto (hay 8 disponibles, cogemos los 4 primeros tras mezclar)
+      const resto = [...SIMBOLOS_RASCA.filter(s => s !== ganador)].sort(() => Math.random() - 0.5);
       simbolos = [ganador, ganador, resto[0], resto[1], resto[2], resto[3]];
 
     } else {
-      // 80% — sin premio: 6 símbolos todos distintos entre sí (imposible par ni trío)
-      const mezclados = [...SIMBOLOS_RASCA].sort(() => Math.random() - 0.5);
-      simbolos = mezclados.slice(0, 6); // 9 símbolos → cogemos 6 distintos, garantizado sin par
+      // 57% — sin premio: 6 símbolos todos distintos (imposible par ni trío)
+      simbolos = [...SIMBOLOS_RASCA].sort(() => Math.random() - 0.5).slice(0, 6);
     }
 
-    // Mezclar posiciones para que el par/trío no siempre esté al principio
+    // Mezclar posiciones para que el resultado no sea predecible visualmente
     for (let i = simbolos.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [simbolos[i], simbolos[j]] = [simbolos[j], simbolos[i]];
@@ -873,12 +863,12 @@ export default function Casino() {
       let premio = 0;
       let msg = '';
       if (maxIguales >= 3) {
-        const mult = simboloGanador === '💎' ? 50 : simboloGanador === '💵' ? 30 : 15;
+        const mult = simboloGanador === '💎' ? 80 : simboloGanador === '💵' ? 40 : 20;
         premio = rascaApuesta * mult;
         msg = `🎉 ¡TRIFECTA! ${simboloGanador}×3 — +${premio} monedas`;
         setRascaResultadoTipo('ganado');
       } else if (maxIguales === 2) {
-        premio = rascaApuesta * 2;
+        premio = rascaApuesta * 4;
         msg = `✨ Par de ${simboloGanador} — +${premio} monedas`;
         setRascaResultadoTipo('ganado');
       } else {
@@ -913,12 +903,12 @@ export default function Casino() {
     let premio = 0;
     let msg = '';
     if (maxIguales >= 3) {
-      const mult = simboloGanador === '💎' ? 50 : simboloGanador === '💵' ? 30 : 15;
+      const mult = simboloGanador === '💎' ? 80 : simboloGanador === '💵' ? 40 : 20;
       premio = rascaApuesta * mult;
       msg = `🎉 ¡TRIFECTA! ${simboloGanador}×3 — +${premio} monedas`;
       setRascaResultadoTipo('ganado');
     } else if (maxIguales === 2) {
-      premio = rascaApuesta * 2;
+      premio = rascaApuesta * 4;
       msg = `✨ Par de ${simboloGanador} — +${premio} monedas`;
       setRascaResultadoTipo('ganado');
     } else {
@@ -958,7 +948,13 @@ export default function Casino() {
     return mazo;
   })();
 
-  const cartaAleatoria = () => BARAJA_WAR[Math.floor(Math.random() * BARAJA_WAR.length)];
+  // Saca N cartas distintas del mazo (sin repetición dentro de la misma mano)
+  const cartasAleatorias = (n) => {
+    const copia = [...BARAJA_WAR].sort(() => Math.random() - 0.5);
+    return copia.slice(0, n);
+  };
+
+  const mejorCarta = (cartas) => cartas.reduce((m, c) => c.valor > m.valor ? c : m);
 
   const jugarWar = () => {
     if (monedas < warApuesta) { Alert.alert('Falta saldo', 'No tienes suficientes monedas.'); return; }
@@ -972,27 +968,35 @@ export default function Casino() {
     guardarDatoCasinoLocal('@bj_monedas', saldoResta);
 
     setTimeout(() => {
-      const cJugador = cartaAleatoria();
-      const cCrupier = cartaAleatoria();
-      setWarCartaJugador(cJugador);
-      setWarCartaCrupier(cCrupier);
+      // Cada uno recibe 3 cartas; gana quien tenga la carta más alta
+      const mazoMezclado = [...BARAJA_WAR].sort(() => Math.random() - 0.5);
+      const cartasJugador = mazoMezclado.slice(0, 3);
+      const cartasCrupier = mazoMezclado.slice(3, 6);
+      const cJugador = mejorCarta(cartasJugador);
+      const cCrupier = mejorCarta(cartasCrupier);
+
+      // Guardamos todas las cartas para mostrarlas
+      setWarCartaJugador({ ...cJugador, extras: cartasJugador.filter(c => c !== cJugador) });
+      setWarCartaCrupier({ ...cCrupier, extras: cartasCrupier.filter(c => c !== cCrupier) });
       setWarAnimando(false);
 
       if (cJugador.valor > cCrupier.valor) {
-        const premio = saldoResta + warApuesta * 2;
+        // Gana: devuelve la apuesta + x3 (neto +2x)
+        const premio = saldoResta + warApuesta * 3;
         setMonedas(premio);
         guardarDatoCasinoLocal('@bj_monedas', premio);
-        setWarMensaje(`🏆 ¡Ganas! ${cJugador.nombre}${cJugador.palo} > ${cCrupier.nombre}${cCrupier.palo} · +${warApuesta * 2} monedas`);
+        setWarMensaje(`🏆 ¡Tu ${cJugador.nombre}${cJugador.palo} supera al ${cCrupier.nombre}${cCrupier.palo}! +${warApuesta * 3} monedas`);
         setWarResultadoTipo('ganado');
         setWarFase('fin');
       } else if (cJugador.valor < cCrupier.valor) {
         const saldoFin = verificarAuxilioBancarrota(saldoResta);
         setMonedas(saldoFin);
-        setWarMensaje(`💀 Pierdes. ${cJugador.nombre}${cJugador.palo} < ${cCrupier.nombre}${cCrupier.palo}`);
+        setWarMensaje(`💀 Tu ${cJugador.nombre}${cJugador.palo} pierde ante el ${cCrupier.nombre}${cCrupier.palo}`);
         setWarResultadoTipo('perdido');
         setWarFase('fin');
       } else {
-        setWarMensaje(`⚔️ ¡EMPATE! Ambos con ${cJugador.nombre}. ¿Vas a la guerra?`);
+        // Empate en carta alta → opción de ir a la guerra
+        setWarMensaje(`⚔️ ¡EMPATE en ${cJugador.nombre}! ¿Vas a LA GUERRA?`);
         setWarResultadoTipo('empate');
         setWarFase('empate');
       }
@@ -1000,27 +1004,28 @@ export default function Casino() {
   };
 
   const irAGuerra = () => {
-    // Doblar la apuesta y tirar de nuevo
-    if (monedas < warApuesta) { Alert.alert('Falta saldo', 'No tienes monedas para doblar.'); return; }
+    if (monedas < warApuesta) { Alert.alert('Falta saldo', 'No tienes monedas para doblar la apuesta.'); return; }
     setWarAnimando(true);
     setWarMensaje('');
 
-    const saldoResta = monedas - warApuesta; // dobla la apuesta total
+    // Paga otra apuesta igual — ahora tiene 2x en juego
+    const saldoResta = monedas - warApuesta;
     setMonedas(saldoResta);
     guardarDatoCasinoLocal('@bj_monedas', saldoResta);
 
     setTimeout(() => {
-      const cJugador = cartaAleatoria();
-      const cCrupier = cartaAleatoria();
+      const mazoMezclado = [...BARAJA_WAR].sort(() => Math.random() - 0.5);
+      const cJugador = mazoMezclado[0];
+      const cCrupier = mazoMezclado[1];
       setWarCartasGuerra({ jugador: cJugador, crupier: cCrupier });
       setWarAnimando(false);
 
       if (cJugador.valor >= cCrupier.valor) {
-        // Gana la guerra: cobra apuesta original + apuesta doble
-        const premio = saldoResta + warApuesta * 4;
+        // Gana la guerra: devuelve las 2 apuestas + x6 sobre la apuesta original (premio gordo)
+        const premio = saldoResta + warApuesta * 6;
         setMonedas(premio);
         guardarDatoCasinoLocal('@bj_monedas', premio);
-        setWarMensaje(`🔥 ¡GUERRA GANADA! ${cJugador.nombre}${cJugador.palo} vs ${cCrupier.nombre}${cCrupier.palo} · +${warApuesta * 4} monedas`);
+        setWarMensaje(`🔥 ¡GUERRA GANADA! ${cJugador.nombre}${cJugador.palo} vs ${cCrupier.nombre}${cCrupier.palo} · +${warApuesta * 6} monedas`);
         setWarResultadoTipo('ganado');
       } else {
         const saldoFin = verificarAuxilioBancarrota(saldoResta);
@@ -1033,7 +1038,7 @@ export default function Casino() {
   };
 
   const rendirse = () => {
-    // Pierde la mitad de la apuesta (recupera la otra mitad)
+    // Recupera la mitad de la apuesta original
     const recuperado = Math.floor(warApuesta / 2);
     const saldoFin = monedas + recuperado;
     setMonedas(saldoFin);
@@ -1708,7 +1713,7 @@ export default function Casino() {
                 <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', alignItems: 'center', width: '100%' }}>
                   <Text style={{ fontSize: 42, marginBottom: 8 }}>🎟️</Text>
                   <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15, marginBottom: 4 }}>CARTÓN LA BODEGUILLA</Text>
-                  <Text style={{ color: '#9CA3AF', fontSize: 11, textAlign: 'center', lineHeight: 17 }}>9 símbolos · 6 casillas · Par x2{'\n'}💎×3 paga x50 · 💵×3 paga x30 · resto ×3 paga x15</Text>
+                  <Text style={{ color: '#9CA3AF', fontSize: 11, textAlign: 'center', lineHeight: 17 }}>9 símbolos · 6 casillas · Par x4{'\n'}💎×3 paga x80 · 💵×3 paga x40 · resto ×3 paga x20</Text>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={{ fontSize: 13, fontWeight: '700', color: '#9CA3AF' }}>Precio:</Text>
@@ -1797,17 +1802,32 @@ export default function Casino() {
             </View>
 
             {/* Mesa de cartas */}
-            <View style={{ gap: 10, marginBottom: 14 }}>
+            <View style={{ gap: 8, marginBottom: 14 }}>
 
-              {/* Carta crupier */}
+              {/* Cartas crupier */}
               <View style={{ alignItems: 'center', gap: 6 }}>
                 <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>CRUPIER</Text>
                 {warAnimando ? (
-                  <View style={[styles.cartaWarSlot, { overflow: 'hidden' }]}>
-                    <Image source={require('./assets/Javicristo.png')} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                  <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+                    {[0,1,2].map(i => (
+                      <View key={i} style={[styles.cartaWarSlot, { overflow: 'hidden' }]}>
+                        <Image source={require('./assets/Javicristo.png')} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      </View>
+                    ))}
                   </View>
                 ) : warCartaCrupier ? (
-                  <RenderizarCarta nombre={warCartaCrupier.nombre} palo={warCartaCrupier.palo} oculta={false} />
+                  <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', alignItems: 'flex-end' }}>
+                    {/* Cartas secundarias más pequeñas */}
+                    {(warCartaCrupier.extras || []).map((c, i) => (
+                      <View key={i} style={{ opacity: 0.55, transform: [{ scale: 0.82 }] }}>
+                        <RenderizarCarta nombre={c.nombre} palo={c.palo} oculta={false} />
+                      </View>
+                    ))}
+                    {/* Carta ganadora destacada */}
+                    <View style={{ borderWidth: 2, borderColor: warResultadoTipo === 'perdido' ? '#EF4444' : warResultadoTipo === 'ganado' ? '#34D399' : '#FBBF24', borderRadius: 9 }}>
+                      <RenderizarCarta nombre={warCartaCrupier.nombre} palo={warCartaCrupier.palo} oculta={false} />
+                    </View>
+                  </View>
                 ) : (
                   <View style={styles.cartaWarSlot}>
                     <Text style={{ color: 'rgba(255,255,255,0.2)', fontSize: 28 }}>—</Text>
@@ -1822,15 +1842,28 @@ export default function Casino() {
                 <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' }} />
               </View>
 
-              {/* Carta jugador */}
+              {/* Cartas jugador */}
               <View style={{ alignItems: 'center', gap: 6 }}>
                 <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5 }}>TÚ</Text>
                 {warAnimando ? (
-                  <View style={[styles.cartaWarSlot, { overflow: 'hidden' }]}>
-                    <Image source={require('./assets/Javicristo.png')} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                  <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center' }}>
+                    {[0,1,2].map(i => (
+                      <View key={i} style={[styles.cartaWarSlot, { overflow: 'hidden' }]}>
+                        <Image source={require('./assets/Javicristo.png')} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      </View>
+                    ))}
                   </View>
                 ) : warCartaJugador ? (
-                  <RenderizarCarta nombre={warCartaJugador.nombre} palo={warCartaJugador.palo} oculta={false} />
+                  <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', alignItems: 'flex-end' }}>
+                    {(warCartaJugador.extras || []).map((c, i) => (
+                      <View key={i} style={{ opacity: 0.55, transform: [{ scale: 0.82 }] }}>
+                        <RenderizarCarta nombre={c.nombre} palo={c.palo} oculta={false} />
+                      </View>
+                    ))}
+                    <View style={{ borderWidth: 2, borderColor: warResultadoTipo === 'ganado' ? '#34D399' : warResultadoTipo === 'perdido' ? '#EF4444' : '#FBBF24', borderRadius: 9 }}>
+                      <RenderizarCarta nombre={warCartaJugador.nombre} palo={warCartaJugador.palo} oculta={false} />
+                    </View>
+                  </View>
                 ) : (
                   <View style={styles.cartaWarSlot}>
                     <Text style={{ color: 'rgba(255,255,255,0.2)', fontSize: 28 }}>—</Text>
@@ -1898,7 +1931,7 @@ export default function Casino() {
                 <>
                   <TouchableOpacity disabled={warAnimando} style={styles.btnBlackjackFijoMorado} onPress={irAGuerra}>
                     <Text style={styles.txtBtnAccionPrincipalText}>
-                      {warAnimando ? 'EN GUERRA...' : `⚔️ IR A LA GUERRA (doblar: ${warApuesta * 2})`}
+                      {warAnimando ? 'EN GUERRA...' : `⚔️ IR A LA GUERRA · +${warApuesta} más → ganas x6`}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.btnBlackjackFijoBlanco} onPress={rendirse}>

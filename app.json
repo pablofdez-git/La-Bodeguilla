@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#5B3281"
       },
-      "package": "com.elchungazo.labodeguilla.v2"
+      "package": "com.elchungazo.labodeguilla.v2",
+      "softwareKeyboardLayoutMode": "pan"
     },
     "extra": {
       "eas": {
