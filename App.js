@@ -1,13 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, TouchableOpacity, ActivityIndicator, TextInput, ScrollView, StatusBar, Alert } from 'react-native';
+import {
+  StyleSheet, Text, View, FlatList, TouchableOpacity,
+  ActivityIndicator, TextInput, ScrollView, StatusBar, Alert
+} from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from './supabase';
-import { Eye, ClipboardList, ShoppingCart, Settings, Plus, Minus, CheckSquare, Trash2, SlidersHorizontal, Save, Gamepad } from 'lucide-react-native';
-// Importamos el archivo independiente del casino
+import {
+  Eye, ClipboardList, ShoppingCart, Settings,
+  Plus, Minus, CheckSquare, Trash2, SlidersHorizontal,
+  Save, Gamepad, AlertTriangle
+} from 'lucide-react-native';
 import Casino from './Casino';
 
 const CATEGORIAS = ['Todos', 'Bebidas', 'Mezcla', 'Limpieza', 'Otros'];
 const CATEGORIAS_FORM = ['Bebidas', 'Mezcla', 'Limpieza', 'Otros'];
+
+// Paleta oscura con acento morado de la pena
+const C = {
+  bg:           '#131215',
+  surface:      '#1C1A20',
+  surfaceAlt:   '#252229',
+  border:       '#332F3C',
+  accent:       '#9B6DCC',
+  accentDim:    '#2A1F3D',
+  success:      '#2D9E5F',
+  danger:       '#C94A3F',
+  dangerDim:    '#3A1210',
+  textPrim:     '#EDE9F4',
+  textSec:      '#9890A8',
+  textMuted:    '#5A5466',
+  white:        '#FFFFFF',
+};
 
 function ContenidoApp() {
   const insets = useSafeAreaInsets();
@@ -19,15 +42,14 @@ function ContenidoApp() {
   const [cargando, setCargando] = useState(true);
 
   const [stockTemporal, setStockTemporal] = useState({});
+  const [inputRecuento, setInputRecuento] = useState({});
 
-  // Estados de la pestaña COMPRA
   const [nombreCompra, setNombreCompra] = useState('');
   const [cantidadCompra, setCantidadCompra] = useState(1);
   const [lugarCompra, setLugarCompra] = useState('');
-  const [mostrandoAñadirTienda, setMostrandoAñadirTienda] = useState(false);
+  const [mostrandoAnadirTienda, setMostrandoAnadirTienda] = useState(false);
   const [nuevaTiendaNombre, setNuevaTiendaNombre] = useState('');
 
-  // Estados de la pestaña GESTIÓN
   const [nuevoProdNombre, setNuevoProdNombre] = useState('');
   const [nuevoProdCategoria, setNuevoProdCategoria] = useState('Bebidas');
   const [nuevoProdMinimo, setNuevoProdMinimo] = useState('2');
@@ -35,19 +57,28 @@ function ContenidoApp() {
   const cargarDatos = async () => {
     try {
       setCargando(true);
-      const { data: prodData, error: prodError } = await supabase.from('productos').select('*').order('nombre', { ascending: true });
+      const { data: prodData, error: prodError } = await supabase
+        .from('productos').select('*').order('nombre', { ascending: true });
       if (prodError) throw prodError;
       setProductos(prodData);
 
       const temp = {};
-      prodData.forEach(p => { temp[p.id] = p.stock_actual; });
+      const inp = {};
+      prodData.forEach(p => {
+        temp[p.id] = p.stock_actual;
+        inp[p.id] = String(p.stock_actual);
+      });
       setStockTemporal(temp);
+      setInputRecuento(inp);
 
-      const { data: extData, error: extError } = await supabase.from('extras_compra').select('*').eq('comprado', false).order('created_at', { ascending: false });
+      const { data: extData, error: extError } = await supabase
+        .from('extras_compra').select('*').eq('comprado', false)
+        .order('created_at', { ascending: false });
       if (extError) throw extError;
       setExtras(extData);
 
-      const { data: tienData, error: tienError } = await supabase.from('tiendas').select('*').order('nombre', { ascending: true });
+      const { data: tienData, error: tienError } = await supabase
+        .from('tiendas').select('*').order('nombre', { ascending: true });
       if (tienError) throw tienError;
       setTiendas(tienData);
 
@@ -59,12 +90,24 @@ function ContenidoApp() {
     }
   };
 
-  useEffect(() => {
-    cargarDatos();
-  }, []);
+  useEffect(() => { cargarDatos(); }, []);
 
+  // Recuento: botones +/-
   const modificarStockTemporal = (id, cambio) => {
-    setStockTemporal(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + cambio) }));
+    setStockTemporal(prev => {
+      const nuevo = Math.max(0, (prev[id] || 0) + cambio);
+      setInputRecuento(pi => ({ ...pi, [id]: String(nuevo) }));
+      return { ...prev, [id]: nuevo };
+    });
+  };
+
+  // Recuento: input directo con el numero que queda
+  const handleInputRecuento = (id, texto) => {
+    setInputRecuento(prev => ({ ...prev, [id]: texto }));
+    const num = parseInt(texto, 10);
+    if (!isNaN(num) && num >= 0) {
+      setStockTemporal(prev => ({ ...prev, [id]: num }));
+    }
   };
 
   const guardarRecuento = async () => {
@@ -75,29 +118,28 @@ function ContenidoApp() {
       }
       await cargarDatos();
       setPestanaActual('visual');
-      Alert.alert('Éxito', '¡Recuento guardado en La Bodeguilla!');
-    } catch (error) {
-      Alert.alert('Error', 'No se pudo guardar el recuento');
+      Alert.alert('Listo', 'Recuento guardado en La Bodeguilla.');
+    } catch {
+      Alert.alert('Error', 'No se pudo guardar el recuento.');
     } finally {
       setCargando(false);
     }
   };
 
-  const añadirALaCompra = async () => {
+  const anadirALaCompra = async () => {
     if (!nombreCompra.trim()) {
-      Alert.alert('Aviso', 'Pon el nombre de lo que hay que comprar, melón.');
+      Alert.alert('Falta el nombre', 'Pon que hay que comprar.');
       return;
     }
     try {
       const itemFormateado = `${nombreCompra.trim()} (x${cantidadCompra})`;
-      const { error } = await supabase.from('extras_compra').insert([{ nombre: itemFormateado, lugar_compra: lugarCompra }]);
+      const { error } = await supabase.from('extras_compra')
+        .insert([{ nombre: itemFormateado, lugar_compra: lugarCompra }]);
       if (error) throw error;
       setNombreCompra('');
       setCantidadCompra(1);
       await cargarDatos();
-    } catch (error) {
-      console.error(error.message);
-    }
+    } catch (error) { console.error(error.message); }
   };
 
   const registrarNuevaTienda = async () => {
@@ -106,31 +148,26 @@ function ContenidoApp() {
       const nombreLimpio = nuevaTiendaNombre.trim();
       const { error } = await supabase.from('tiendas').insert([{ nombre: nombreLimpio }]);
       if (error) {
-        if (error.code === '23505') Alert.alert('Aviso', 'Ese sitio ya está en la lista.');
+        if (error.code === '23505') Alert.alert('Aviso', 'Ese sitio ya esta en la lista.');
         else throw error;
       } else {
         setLugarCompra(nombreLimpio);
         setNuevaTiendaNombre('');
-        setMostrandoAñadirTienda(false);
+        setMostrandoAnadirTienda(false);
         await cargarDatos();
       }
-    } catch (error) {
-      console.error(error.message);
-    }
+    } catch (error) { console.error(error.message); }
   };
 
   const eliminarTienda = async (id, nombre) => {
     try {
-      const { error } = await supabase.from('tiendas').delete() .eq('id', id);
+      const { error } = await supabase.from('tiendas').delete().eq('id', id);
       if (error) throw error;
       if (lugarCompra === nombre) {
         setLugarCompra(tiendas.length > 1 ? tiendas.find(t => t.id !== id).nombre : '');
       }
       await cargarDatos();
-      Alert.alert('Eliminado', `Sitio "${nombre}" quitado de la lista.`);
-    } catch (error) {
-      console.error(error.message);
-    }
+    } catch (error) { console.error(error.message); }
   };
 
   const procesarCompraCompletada = async (id, nombreItem) => {
@@ -144,58 +181,59 @@ function ContenidoApp() {
         nombreReal = coincidencia[1].trim();
         cantidadASumar = parseInt(coincidencia[2], 10);
       }
-      const productoExistente = productos.find(p => p.nombre.toLowerCase().trim() === nombreReal.toLowerCase());
+      const productoExistente = productos.find(
+        p => p.nombre.toLowerCase().trim() === nombreReal.toLowerCase()
+      );
       if (productoExistente) {
         const nuevoStock = productoExistente.stock_actual + cantidadASumar;
         await supabase.from('productos').update({ stock_actual: nuevoStock }).eq('id', productoExistente.id);
       }
       await supabase.from('extras_compra').update({ comprado: true }).eq('id', id);
       await cargarDatos();
-      if (productoExistente) Alert.alert('Comprado', `Suman ${cantidadASumar} unidades a "${productoExistente.nombre}".`);
-      else Alert.alert('Comprado', `Quitado de la lista.`);
-    } catch (error) {
-      console.error(error.message);
-    } finally {
-      setCargando(false);
-    }
+      if (productoExistente)
+        Alert.alert('Comprado', `+${cantidadASumar} unidades a "${productoExistente.nombre}".`);
+      else
+        Alert.alert('Comprado', 'Quitado de la lista.');
+    } catch (error) { console.error(error.message); }
+    finally { setCargando(false); }
   };
 
   const eliminarExtraSinSumar = async (id) => {
     try {
       await supabase.from('extras_compra').update({ comprado: true }).eq('id', id);
       await cargarDatos();
-    } catch (error) {
-      console.error(error.message);
-    }
+    } catch (error) { console.error(error.message); }
   };
 
   const registrarNuevoProductoInventario = async () => {
     if (!nuevoProdNombre.trim()) {
-      Alert.alert('Falta campo', 'Escribe el nombre del artículo.');
+      Alert.alert('Falta campo', 'Escribe el nombre del articulo.');
       return;
     }
     const minimoNumerico = parseInt(nuevoProdMinimo, 10);
     if (isNaN(minimoNumerico) || minimoNumerico < 0) {
-      Alert.alert('Falta campo', 'El stock mínimo debe ser un número.');
+      Alert.alert('Falta campo', 'El stock minimo debe ser un numero.');
       return;
     }
     try {
       setCargando(true);
-      const { error } = await supabase.from('productos').insert([{ nombre: nuevoProdNombre.trim(), categoria: nuevoProdCategoria, stock_minimo: minimoNumerico, stock_actual: 0 }]);
+      const { error } = await supabase.from('productos').insert([{
+        nombre: nuevoProdNombre.trim(),
+        categoria: nuevoProdCategoria,
+        stock_minimo: minimoNumerico,
+        stock_actual: 0,
+      }]);
       if (error) {
-        if (error.code === '23505') Alert.alert('Aviso', 'Ese producto ya existe en la Alacena.');
+        if (error.code === '23505') Alert.alert('Aviso', 'Ese producto ya existe.');
         else throw error;
       } else {
-        Alert.alert('Registrado', `"${nuevoProdNombre.trim()}" añadido correctamente.`);
+        Alert.alert('Registrado', `"${nuevoProdNombre.trim()}" anadido.`);
         setNuevoProdNombre('');
         setNuevoProdMinimo('2');
         await cargarDatos();
       }
-    } catch (error) {
-      console.error(error.message);
-    } finally {
-      setCargando(false);
-    }
+    } catch (error) { console.error(error.message); }
+    finally { setCargando(false); }
   };
 
   const eliminarProductoInventario = async (id, nombre) => {
@@ -205,64 +243,94 @@ function ContenidoApp() {
       if (error) throw error;
       await cargarDatos();
       Alert.alert('Eliminado', `"${nombre}" borrado.`);
-    } catch (error) {
-      console.error(error.message);
-    } finally {
-      setCargando(false);
-    }
+    } catch (error) { console.error(error.message); }
+    finally { setCargando(false); }
   };
 
   const generarListaCompraAgrupada = () => {
     const list = {};
-    extras.forEach(e => { const t = e.lugar_compra || 'Mercadona'; if (!list[t]) list[t] = []; list[t].push(e); });
+    extras.forEach(e => {
+      const t = e.lugar_compra || 'Sin sitio';
+      if (!list[t]) list[t] = [];
+      list[t].push(e);
+    });
     return list;
   };
 
-  const productosFiltrados = categoriaSeleccionada === 'Todos' ? productos : productos.filter(p => p.categoria === categoriaSeleccionada);
+  const productosFiltrados = categoriaSeleccionada === 'Todos'
+    ? productos
+    : productos.filter(p => p.categoria === categoriaSeleccionada);
+
+  const productosEnAlerta = productos.filter(p => p.stock_actual <= p.stock_minimo).length;
 
   return (
-    <View style={styles.contenedorPrincipal}>
-      <StatusBar barStyle="light-content" backgroundColor="#5B3281" />
+    <View style={s.root}>
+      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
 
-      <View style={[styles.cabecera, { paddingTop: insets.top + 12 }]}>
-        <Text style={styles.titulo}>La Bodeguilla</Text>
-        <Text style={styles.subtitulo}>PEÑA EL CHUNGAZO</Text>
+      {/* CABECERA */}
+      <View style={[s.header, { paddingTop: insets.top + 14 }]}>
+        <View>
+          <Text style={s.headerTitle}>La Bodeguilla</Text>
+          <Text style={s.headerSub}>PENA EL CHUNGAZO</Text>
+        </View>
+        {productosEnAlerta > 0 && (
+          <View style={s.alertBadge}>
+            <AlertTriangle size={13} color={C.accent} />
+            <Text style={s.alertBadgeTxt}>{productosEnAlerta}</Text>
+          </View>
+        )}
       </View>
 
       {cargando ? (
-        <View style={styles.centrado}><ActivityIndicator size="large" color="#5B3281" /></View>
+        <View style={s.centrado}>
+          <ActivityIndicator size="large" color={C.accent} />
+          <Text style={[s.textMuted, { marginTop: 12 }]}>Cargando...</Text>
+        </View>
       ) : (
         <View style={{ flex: 1 }}>
 
-          {/* PESTAÑA 1: INVENTARIO VISUAL */}
+          {/* ALACENA */}
           {pestanaActual === 'visual' && (
             <View style={{ flex: 1 }}>
-              <View style={styles.contenedorFiltros}>
+              <View style={s.filterBar}>
                 <FlatList
                   data={CATEGORIAS}
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  keyExtractor={(item) => item}
+                  keyExtractor={item => item}
                   renderItem={({ item }) => (
-                    <TouchableOpacity style={[styles.botonFiltro, categoriaSeleccionada === item && styles.botonFiltroActivo]} onPress={() => setCategoriaSeleccionada(item)}>
-                      <Text style={[styles.textoFiltro, categoriaSeleccionada === item && styles.textoFiltroActivo]}>{item}</Text>
+                    <TouchableOpacity
+                      style={[s.chip, categoriaSeleccionada === item && s.chipActive]}
+                      onPress={() => setCategoriaSeleccionada(item)}
+                    >
+                      <Text style={[s.chipTxt, categoriaSeleccionada === item && s.chipTxtActive]}>
+                        {item.toUpperCase()}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 />
               </View>
               <FlatList
                 data={productosFiltrados}
-                keyExtractor={(item) => item.id.toString()}
-                contentContainerStyle={styles.listaContenido}
+                keyExtractor={item => item.id.toString()}
+                contentContainerStyle={s.listPad}
+                ListEmptyComponent={<Text style={s.emptyTxt}>Nada en esta categoria.</Text>}
                 renderItem={({ item }) => {
                   const bajo = item.stock_actual <= item.stock_minimo;
                   return (
-                    <View style={[styles.tarjeta, bajo && styles.tarjetaAlerta]}>
+                    <View style={[s.card, bajo && s.cardAlert]}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.prodNombre}>{item.nombre}</Text>
-                        <Text style={styles.prodSub}>{item.categoria} • MÍNIMO: {item.stock_minimo}</Text>
+                        <Text style={s.cardName}>{item.nombre}</Text>
+                        <Text style={s.cardSub}>
+                          {item.categoria.toUpperCase()}  {'\u00B7'}  MIN {item.stock_minimo}
+                        </Text>
                       </View>
-                      <Text style={[styles.txtStock, bajo && styles.txtStockAlerta]}>{item.stock_actual}</Text>
+                      <View style={s.stockBadge}>
+                        <Text style={[s.stockNum, bajo && s.stockNumAlert]}>
+                          {item.stock_actual}
+                        </Text>
+                        {bajo && <AlertTriangle size={11} color={C.danger} style={{ marginTop: 2 }} />}
+                      </View>
                     </View>
                   );
                 }}
@@ -270,93 +338,166 @@ function ContenidoApp() {
             </View>
           )}
 
-          {/* PESTAÑA 2: MODO RECUENTO */}
+          {/* RECUENTO */}
           {pestanaActual === 'recuento' && (
             <View style={{ flex: 1 }}>
+              <View style={s.recuentoBanner}>
+                <Text style={s.recuentoBannerTxt}>
+                  Escribe cuanto queda de cada cosa. Puedes usar el campo o los botones.
+                </Text>
+              </View>
               <FlatList
                 data={productos}
-                keyExtractor={(item) => item.id.toString()}
-                contentContainerStyle={styles.listaContenido}
-                renderItem={({ item }) => (
-                  <View style={styles.tarjetaRecuento}>
-                    <Text style={styles.prodNombreRecuento}>{item.nombre}</Text>
-                    <View style={styles.controlesRecuento}>
-                      <TouchableOpacity style={styles.btnMenos} onPress={() => modificarStockTemporal(item.id, -1)}>
-                        <Minus color="#555" size={18} />
-                      </TouchableOpacity>
-                      <Text style={styles.txtStockTemp}>{stockTemporal[item.id] ?? 0}</Text>
-                      <TouchableOpacity style={styles.btnMas} onPress={() => modificarStockTemporal(item.id, 1)}>
-                        <Plus color="#fff" size={18} />
-                      </TouchableOpacity>
+                keyExtractor={item => item.id.toString()}
+                contentContainerStyle={s.listPad}
+                renderItem={({ item }) => {
+                  const anterior = item.stock_actual;
+                  const actual = stockTemporal[item.id] ?? 0;
+                  const diff = actual - anterior;
+                  return (
+                    <View style={s.recuentoCard}>
+                      <View style={{ flex: 1, marginRight: 10 }}>
+                        <Text style={s.cardName} numberOfLines={1}>{item.nombre}</Text>
+                        <Text style={s.cardSub}>
+                          {'ANTES: ' + anterior}
+                          {diff !== 0 && (
+                            <Text style={{ color: diff > 0 ? C.success : C.danger }}>
+                              {diff > 0 ? '  +' + diff : '  ' + diff}
+                            </Text>
+                          )}
+                        </Text>
+                      </View>
+                      <View style={s.recuentoControls}>
+                        <TouchableOpacity
+                          style={s.btnMenos}
+                          onPress={() => modificarStockTemporal(item.id, -1)}
+                        >
+                          <Minus color={C.textSec} size={16} />
+                        </TouchableOpacity>
+
+                        <TextInput
+                          style={s.recuentoInput}
+                          keyboardType="numeric"
+                          value={inputRecuento[item.id] ?? '0'}
+                          onChangeText={txt => handleInputRecuento(item.id, txt)}
+                          selectTextOnFocus
+                        />
+
+                        <TouchableOpacity
+                          style={s.btnMas}
+                          onPress={() => modificarStockTemporal(item.id, 1)}
+                        >
+                          <Plus color={C.bg} size={16} />
+                        </TouchableOpacity>
+                      </View>
                     </View>
-                  </View>
-                )}
+                  );
+                }}
               />
-              <TouchableOpacity style={styles.btnGuardar} onPress={guardarRecuento}>
-                <Text style={styles.txtGuardar}>CONFIRMAR RECUENTO</Text>
+              <TouchableOpacity style={s.btnPrimary} onPress={guardarRecuento}>
+                <Save size={17} color={C.bg} style={{ marginRight: 8 }} />
+                <Text style={s.btnPrimaryTxt}>GUARDAR RECUENTO</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* PESTAÑA 3: COMPRA */}
+          {/* COMPRA */}
           {pestanaActual === 'compra' && (
-            <ScrollView style={styles.listaContenido}>
-              <View style={styles.formularioExtra}>
-                <Text style={styles.labelForm}>¿Qué falta comprar?</Text>
-                <TextInput style={styles.input} placeholder="Ej: Bolsas de hielo, Ron, Coca-Cola..." placeholderTextColor="#999" value={nombreCompra} onChangeText={setNombreCompra} />
-                <Text style={styles.labelForm}>Cantidad:</Text>
-                <View style={styles.selectorCantidad}>
-                  <TouchableOpacity style={styles.btnCant} onPress={() => setCantidadCompra(m => Math.max(1, m - 1))}>
-                    <Minus color="#5B3281" size={20} />
+            <ScrollView style={s.listPad} showsVerticalScrollIndicator={false}>
+              <View style={s.formCard}>
+                <Text style={s.sectionLabel}>QUE HAY QUE COMPRAR</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="Ej: Coca-Cola 2L, Ron Dyc..."
+                  placeholderTextColor={C.textMuted}
+                  value={nombreCompra}
+                  onChangeText={setNombreCompra}
+                />
+
+                <Text style={s.fieldLabel}>Cantidad</Text>
+                <View style={s.qtyRow}>
+                  <TouchableOpacity style={s.btnQty} onPress={() => setCantidadCompra(m => Math.max(1, m - 1))}>
+                    <Minus color={C.accent} size={18} />
                   </TouchableOpacity>
-                  <Text style={styles.txtCantNum}>{cantidadCompra}</Text>
-                  <TouchableOpacity style={styles.btnCant} onPress={() => setCantidadCompra(m => m + 1)}>
-                    <Plus color="#5B3281" size={20} />
+                  <Text style={s.qtyNum}>{cantidadCompra}</Text>
+                  <TouchableOpacity style={s.btnQty} onPress={() => setCantidadCompra(m => m + 1)}>
+                    <Plus color={C.accent} size={18} />
                   </TouchableOpacity>
                 </View>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <Text style={[styles.labelForm, { marginBottom: 0 }]}>¿Dónde se compra?</Text>
-                  <TouchableOpacity onPress={() => setMostrandoAñadirTienda(!mostrandoAñadirTienda)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <SlidersHorizontal color="#5B3281" size={14} />
-                    <Text style={{ color: '#5B3281', fontWeight: 'bold', fontSize: 13 }}>Config. Sitios</Text>
+
+                <View style={s.fieldRow}>
+                  <Text style={s.fieldLabel}>Donde se compra</Text>
+                  <TouchableOpacity
+                    onPress={() => setMostrandoAnadirTienda(!mostrandoAnadirTienda)}
+                    style={s.configLink}
+                  >
+                    <SlidersHorizontal size={13} color={C.accent} />
+                    <Text style={s.configLinkTxt}>Gestionar sitios</Text>
                   </TouchableOpacity>
                 </View>
-                {mostrandoAñadirTienda && (
-                  <View style={styles.cajaGestionTiendas}>
-                    <View style={styles.miniFormTienda}>
-                      <TextInput style={styles.miniInput} placeholder="Nuevo sitio (Ej: Lupa)" placeholderTextColor="#999" value={nuevaTiendaNombre} onChangeText={setNuevaTiendaNombre} />
-                      <TouchableOpacity style={styles.btnMiniGuardar} onPress={registrarNuevaTienda}><Save color="#fff" size={14} /></TouchableOpacity>
+
+                {mostrandoAnadirTienda && (
+                  <View style={s.tiendaBox}>
+                    <View style={s.tiendaMiniForm}>
+                      <TextInput
+                        style={s.miniInput}
+                        placeholder="Nuevo sitio..."
+                        placeholderTextColor={C.textMuted}
+                        value={nuevaTiendaNombre}
+                        onChangeText={setNuevaTiendaNombre}
+                      />
+                      <TouchableOpacity style={s.btnMiniSave} onPress={registrarNuevaTienda}>
+                        <Save color={C.bg} size={14} />
+                      </TouchableOpacity>
                     </View>
-                    <Text style={{ fontSize: 12, color: '#8E8E93', fontWeight: '700', marginBottom: 4 }}>SITIOS ACTIVOS:</Text>
+                    <Text style={s.tiendaListLabel}>SITIOS GUARDADOS</Text>
                     {tiendas.map(t => (
-                      <View key={t.id} style={styles.filaBorrarTienda}>
-                        <Text style={{ color: '#1C1C1E', fontSize: 14, fontWeight: '500' }}>{t.nombre}</Text>
-                        <TouchableOpacity style={{ padding: 4 }} onPress={() => eliminarTienda(t.id, t.nombre)}><Trash2 color="#ef4444" size={14} /></TouchableOpacity>
+                      <View key={t.id} style={s.tiendaFila}>
+                        <Text style={s.tiendaFilaTxt}>{t.nombre}</Text>
+                        <TouchableOpacity onPress={() => eliminarTienda(t.id, t.nombre)}>
+                          <Trash2 color={C.danger} size={14} />
+                        </TouchableOpacity>
                       </View>
                     ))}
                   </View>
                 )}
-                <View style={styles.contenedorFilaTiendas}>
+
+                <View style={s.chipRow}>
                   {tiendas.map(t => (
-                    <TouchableOpacity key={t.id} style={[styles.btnTiendaDinamica, lugarCompra === t.nombre && styles.btnTiendaActivo]} onPress={() => setLugarCompra(t.nombre)}>
-                      <Text style={{ color: lugarCompra === t.nombre ? '#fff' : '#555', fontSize: 12, fontWeight: '600' }} numberOfLines={1}>{t.nombre.toUpperCase()}</Text>
+                    <TouchableOpacity
+                      key={t.id}
+                      style={[s.chip, lugarCompra === t.nombre && s.chipActive]}
+                      onPress={() => setLugarCompra(t.nombre)}
+                    >
+                      <Text style={[s.chipTxt, lugarCompra === t.nombre && s.chipTxtActive]} numberOfLines={1}>
+                        {t.nombre.toUpperCase()}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-                <TouchableOpacity style={styles.btnAñadirExtra} onPress={añadirALaCompra}><Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>APUNTAR EN LA LISTA</Text></TouchableOpacity>
+
+                <TouchableOpacity style={s.btnPrimary} onPress={anadirALaCompra}>
+                  <Plus size={16} color={C.bg} style={{ marginRight: 6 }} />
+                  <Text style={s.btnPrimaryTxt}>APUNTAR EN LA LISTA</Text>
+                </TouchableOpacity>
               </View>
+
               {Object.keys(generarListaCompraAgrupada()).length === 0 ? (
-                <Text style={styles.txtVacio}>No hay nada apuntado. ¡A disfrutar del local!</Text>
+                <Text style={s.emptyTxt}>La lista esta vacia. Buen sintoma.</Text>
               ) : (
                 Object.entries(generarListaCompraAgrupada()).map(([tienda, items]) => (
-                  <View key={tienda} style={styles.bloqueTienda}>
-                    <Text style={styles.tituloTienda}>COMPRAR EN: {tienda.toUpperCase()}</Text>
+                  <View key={tienda} style={s.bloqueTienda}>
+                    <Text style={s.bloqueTiendaTitulo}>{tienda.toUpperCase()}</Text>
                     {items.map(item => (
-                      <View key={item.id} style={styles.itemCompra}>
-                        <Text style={styles.txtItemCompra}>• {item.nombre}</Text>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                          <TouchableOpacity onPress={() => procesarCompraCompletada(item.id, item.nombre)}><CheckSquare color="#34C759" size={20} /></TouchableOpacity>
-                          <TouchableOpacity onPress={() => eliminarExtraSinSumar(item.id)}><Trash2 color="#ef4444" size={18} /></TouchableOpacity>
+                      <View key={item.id} style={s.itemCompra}>
+                        <Text style={s.itemCompraTxt} numberOfLines={1}>{item.nombre}</Text>
+                        <View style={s.itemCompraAcciones}>
+                          <TouchableOpacity onPress={() => procesarCompraCompletada(item.id, item.nombre)}>
+                            <CheckSquare color={C.success} size={20} />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => eliminarExtraSinSumar(item.id)}>
+                            <Trash2 color={C.danger} size={18} />
+                          </TouchableOpacity>
                         </View>
                       </View>
                     ))}
@@ -367,34 +508,62 @@ function ContenidoApp() {
             </ScrollView>
           )}
 
-          {/* PESTAÑA 4: GESTIÓN DE ARTÍCULOS */}
+          {/* GESTION */}
           {pestanaActual === 'gestion' && (
-            <ScrollView style={styles.listaContenido}>
-              <View style={styles.formularioExtra}>
-                <Text style={[styles.tituloTienda, { marginBottom: 12 }]}>AÑADIR NUEVO ARTÍCULO</Text>
-                <Text style={styles.labelForm}>Nombre del Producto:</Text>
-                <TextInput style={styles.input} placeholder="Ej: Fanta Naranja 2L, Ron Dyc..." placeholderTextColor="#999" value={nuevoProdNombre} onChangeText={setNuevoProdNombre} />
-                <Text style={styles.labelForm}>Categoría:</Text>
-                <View style={styles.contenedorFilaTiendas}>
+            <ScrollView style={s.listPad} showsVerticalScrollIndicator={false}>
+              <View style={s.formCard}>
+                <Text style={s.sectionLabel}>NUEVO ARTICULO</Text>
+                <Text style={s.fieldLabel}>Nombre</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="Ej: Fanta Naranja 2L"
+                  placeholderTextColor={C.textMuted}
+                  value={nuevoProdNombre}
+                  onChangeText={setNuevoProdNombre}
+                />
+                <Text style={s.fieldLabel}>Categoria</Text>
+                <View style={s.chipRow}>
                   {CATEGORIAS_FORM.map(cat => (
-                    <TouchableOpacity key={cat} style={[styles.btnTiendaDinamica, nuevoProdCategoria === cat && styles.btnTiendaActivo]} onPress={() => setNuevoProdCategoria(cat)}>
-                      <Text style={{ color: nuevoProdCategoria === cat ? '#fff' : '#555', fontSize: 12, fontWeight: '600' }}>{cat.toUpperCase()}</Text>
+                    <TouchableOpacity
+                      key={cat}
+                      style={[s.chip, nuevoProdCategoria === cat && s.chipActive]}
+                      onPress={() => setNuevoProdCategoria(cat)}
+                    >
+                      <Text style={[s.chipTxt, nuevoProdCategoria === cat && s.chipTxtActive]}>
+                        {cat.toUpperCase()}
+                      </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
-                <Text style={styles.labelForm}>Stock Mínimo:</Text>
-                <TextInput style={styles.input} placeholder="Ej: 2" placeholderTextColor="#999" keyboardType="numeric" value={nuevoProdMinimo} onChangeText={setNuevoProdMinimo} />
-                <TouchableOpacity style={[styles.btnAñadirExtra, { backgroundColor: '#34C759', marginTop: 8 }]} onPress={registrarNuevoProductoInventario}><Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 15 }}>REGISTRAR</Text></TouchableOpacity>
+                <Text style={s.fieldLabel}>Stock minimo</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder="Ej: 2"
+                  placeholderTextColor={C.textMuted}
+                  keyboardType="numeric"
+                  value={nuevoProdMinimo}
+                  onChangeText={setNuevoProdMinimo}
+                />
+                <TouchableOpacity
+                  style={[s.btnPrimary, { backgroundColor: C.success }]}
+                  onPress={registrarNuevoProductoInventario}
+                >
+                  <Plus size={16} color={C.white} style={{ marginRight: 6 }} />
+                  <Text style={[s.btnPrimaryTxt, { color: C.white }]}>REGISTRAR</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.bloqueTienda}>
-                <Text style={styles.tituloTienda}>ELIMINAR ARTÍCULOS EXISTENTES</Text>
+
+              <View style={s.bloqueTienda}>
+                <Text style={s.bloqueTiendaTitulo}>ARTICULOS EXISTENTES</Text>
                 {productos.map(p => (
-                  <View key={p.id} style={styles.itemCompra}>
+                  <View key={p.id} style={s.itemCompra}>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: '#1C1C1E', fontSize: 15, fontWeight: '600' }}>{p.nombre}</Text>
-                      <Text style={{ color: '#8E8E93', fontSize: 11, marginTop: 2 }}>{p.categoria} • Mín: {p.stock_minimo}</Text>
+                      <Text style={s.itemCompraTxt}>{p.nombre}</Text>
+                      <Text style={s.cardSub}>{p.categoria}  {'\u00B7'}  Min: {p.stock_minimo}</Text>
                     </View>
-                    <TouchableOpacity onPress={() => eliminarProductoInventario(p.id, p.nombre)}><Trash2 color="#ef4444" size= {16} /></TouchableOpacity>
+                    <TouchableOpacity onPress={() => eliminarProductoInventario(p.id, p.nombre)}>
+                      <Trash2 color={C.danger} size={16} />
+                    </TouchableOpacity>
                   </View>
                 ))}
               </View>
@@ -402,107 +571,209 @@ function ContenidoApp() {
             </ScrollView>
           )}
 
-          {/* PESTAÑA 5: CASINO MODULARIZADO */}
-          {pestanaActual === 'blackjack' && (
-            <Casino />
-          )}
+          {/* CASINO */}
+          {pestanaActual === 'blackjack' && <Casino />}
 
         </View>
       )}
 
-      {/* BARRA INFERIOR DE PESTAÑAS */}
-      <View style={[styles.menuInferior, { paddingBottom: insets.bottom, height: 65 + insets.bottom }]}>
-        <TouchableOpacity style={styles.btnTab} onPress={() => setPestanaActual('visual')}>
-          <Eye size={22} color={pestanaActual === 'visual' ? '#5B3281' : '#8E8E93'} />
-          <Text style={[styles.txtTab, pestanaActual === 'visual' && styles.txtTabActivo]}>Alacena</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.btnTab} onPress={() => setPestanaActual('recuento')}>
-          <ClipboardList size={22} color={pestanaActual === 'recuento' ? '#5B3281' : '#8E8E93'} />
-          <Text style={[styles.txtTab, pestanaActual === 'recuento' && styles.txtTabActivo]}>Recuento</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.btnTab} onPress={() => setPestanaActual('compra')}>
-          <ShoppingCart size={22} color={pestanaActual === 'compra' ? '#5B3281' : '#8E8E93'} />
-          <Text style={[styles.txtTab, pestanaActual === 'compra' && styles.txtTabActivo]}>Compra</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.btnTab} onPress={() => setPestanaActual('gestion')}>
-          <Settings size={22} color={pestanaActual === 'gestion' ? '#5B3281' : '#8E8E93'} />
-          <Text style={[styles.txtTab, pestanaActual === 'gestion' && styles.txtTabActivo]}>Gestión</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.btnTab} onPress={() => setPestanaActual('blackjack')}>
-          <Gamepad size={22} color={pestanaActual === 'blackjack' ? '#5B3281' : '#8E8E93'} />
-          <Text style={[styles.txtTab, pestanaActual === 'blackjack' && styles.txtTabActivo]}>Casino</Text>
-        </TouchableOpacity>
+      {/* BARRA INFERIOR */}
+      <View style={[s.tabBar, { paddingBottom: insets.bottom, height: 62 + insets.bottom }]}>
+        {[
+          { id: 'visual',    label: 'Alacena',  Icon: Eye },
+          { id: 'recuento',  label: 'Recuento', Icon: ClipboardList },
+          { id: 'compra',    label: 'Compra',   Icon: ShoppingCart },
+          { id: 'gestion',   label: 'Gestion',  Icon: Settings },
+          { id: 'blackjack', label: 'Casino',   Icon: Gamepad },
+        ].map(({ id, label, Icon }) => {
+          const active = pestanaActual === id;
+          return (
+            <TouchableOpacity key={id} style={s.tabBtn} onPress={() => setPestanaActual(id)}>
+              <View style={[s.tabIconWrap, active && s.tabIconWrapActive]}>
+                <Icon size={20} color={active ? C.accent : C.textMuted} />
+              </View>
+              <Text style={[s.tabTxt, active && s.tabTxtActive]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
-
     </View>
   );
 }
 
-export default function App() { return (<SafeAreaProvider><ContenidoApp /></SafeAreaProvider>); }
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <ContenidoApp />
+    </SafeAreaProvider>
+  );
+}
 
-const styles = StyleSheet.create({
-  contenedorPrincipal: { flex: 1, backgroundColor: '#F4F4F6' },
-  cabecera: { paddingHorizontal: 20, paddingBottom: 16, backgroundColor: '#5B3281', borderBottomWidth: 1, borderColor: '#4A256B' },
-  titulo: { fontSize: 26, fontWeight: 'bold', color: '#ffffff' },
-  subtitulo: { fontSize: 11, color: '#E2D5EE', fontWeight: '800', letterSpacing: 1.5, marginTop: 1 },
-  centrado: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+const s = StyleSheet.create({
+  root:         { flex: 1, backgroundColor: C.bg },
+  centrado:     { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  textMuted:    { color: C.textMuted, fontSize: 13 },
 
-  contenedorFiltros: { paddingVertical: 12, paddingHorizontal: 16, backgroundColor: '#ffffff', borderBottomWidth: 1, borderColor: '#E5E5EA' },
-  botonFiltro: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#E5E5EA', marginRight: 8 },
-  botonFiltroActivo: { backgroundColor: '#5B3281' },
-  textoFiltro: { color: '#555', fontWeight: '600', fontSize: 13 },
-  textoFiltroActivo: { color: '#fff' },
-  listaContenido: { padding: 16 },
+  // Cabecera
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
+    paddingHorizontal: 20, paddingBottom: 16,
+    backgroundColor: C.bg,
+    borderBottomWidth: 1, borderColor: C.border,
+  },
+  headerTitle: { fontSize: 28, fontWeight: '900', color: C.textPrim, letterSpacing: -0.5 },
+  headerSub:   { fontSize: 10, fontWeight: '800', color: C.accent, letterSpacing: 2.5, marginTop: 2 },
+  alertBadge:  {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: C.accentDim, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+  },
+  alertBadgeTxt: { color: C.accent, fontWeight: '800', fontSize: 13 },
 
-  tarjeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: 18, borderRadius: 12, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  tarjetaAlerta: { backgroundColor: '#FDF2F2', borderWidth: 1, borderColor: '#F8B4B4' },
-  prodNombre: { fontSize: 17, fontWeight: 'bold', color: '#1C1C1E' },
-  prodSub: { fontSize: 12, color: '#8E8E93', marginTop: 4 },
-  txtStock: { fontSize: 22, fontWeight: 'bold', color: '#34C759', minWidth: 30, textAlign: 'center' },
-  txtStockAlerta: { color: '#FF3B30' },
+  // Filtros
+  filterBar: {
+    paddingVertical: 12, paddingHorizontal: 14,
+    backgroundColor: C.surface,
+    borderBottomWidth: 1, borderColor: C.border,
+  },
+  chipRow:       { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  chip:          { backgroundColor: C.surfaceAlt, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
+  chipActive:    { backgroundColor: C.accent },
+  chipTxt:       { color: C.textSec, fontWeight: '700', fontSize: 11, letterSpacing: 0.5 },
+  chipTxtActive: { color: C.bg },
 
-  tarjetaRecuento: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: 14, borderRadius: 12, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  prodNombreRecuento: { fontSize: 16, color: '#1C1C1E', fontWeight: '500', flex: 1 },
-  controlesRecuento: { flexDirection: 'row', alignItems: 'center' },
+  listPad: { padding: 14 },
 
-  btnMenos: { backgroundColor: '#E5E5EA', width: 40, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  btnMas: { backgroundColor: '#5B3281', width: 40, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  btnTexto: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
+  // Tarjeta alacena
+  card: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.surface, padding: 16, borderRadius: 10,
+    marginBottom: 10, borderWidth: 1, borderColor: C.border,
+  },
+  cardAlert:     { borderColor: C.danger, backgroundColor: C.dangerDim },
+  cardName:      { fontSize: 16, fontWeight: '700', color: C.textPrim },
+  cardSub:       { fontSize: 11, color: C.textMuted, marginTop: 3, letterSpacing: 0.3 },
+  stockBadge:    { alignItems: 'center' },
+  stockNum:      { fontSize: 24, fontWeight: '900', color: C.success, minWidth: 32, textAlign: 'center' },
+  stockNumAlert: { color: C.danger },
 
-  txtStockTemp: { color: '#1C1C1E', fontSize: 20, fontWeight: 'bold', marginHorizontal: 18, minWidth: 25, textAlign: 'center' },
-  btnGuardar: { backgroundColor: '#5B3281', margin: 16, padding: 16, borderRadius: 12, alignItems: 'center' },
-  txtGuardar: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  // Recuento
+  recuentoBanner: {
+    backgroundColor: C.accentDim, paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderColor: C.border,
+  },
+  recuentoBannerTxt: { color: C.accent, fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  recuentoCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: C.surface, padding: 14, borderRadius: 10,
+    marginBottom: 10, borderWidth: 1, borderColor: C.border,
+  },
+  recuentoControls: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  btnMenos: {
+    backgroundColor: C.surfaceAlt, width: 36, height: 36,
+    borderRadius: 8, justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: C.border,
+  },
+  btnMas: {
+    backgroundColor: C.accent, width: 36, height: 36,
+    borderRadius: 8, justifyContent: 'center', alignItems: 'center',
+  },
+  recuentoInput: {
+    backgroundColor: C.surfaceAlt, color: C.textPrim,
+    fontSize: 20, fontWeight: '900', textAlign: 'center',
+    width: 58, height: 44, borderRadius: 8,
+    borderWidth: 1, borderColor: C.accent,
+  },
 
-  formularioExtra: { backgroundColor: '#ffffff', padding: 16, borderRadius: 12, marginBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  labelForm: { fontSize: 14, fontWeight: '700', color: '#1C1C1E', marginBottom: 6, marginTop: 4 },
-  input: { backgroundColor: '#F4F4F6', color: '#1C1C1E', padding: 12, borderRadius: 8, marginBottom: 14, fontSize: 14 },
-  selectorCantidad: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
-  btnCant: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#E5E5EA', justifyContent: 'center', alignItems: 'center' },
-  txtCantNum: { fontSize: 18, fontWeight: 'bold', color: '#1C1C1E', marginHorizontal: 20, minWidth: 20, textAlign: 'center' },
+  // Boton primario
+  btnPrimary: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    backgroundColor: C.accent, padding: 15, borderRadius: 10, marginTop: 6,
+  },
+  btnPrimaryTxt: { color: C.bg, fontWeight: '900', fontSize: 14, letterSpacing: 0.8 },
 
-  contenedorFilaTiendas: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 16, gap: 8 },
-  btnTiendaDinamica: { backgroundColor: '#E5E5EA', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, minWidth: '22%', flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
-  btnTiendaActivo: { backgroundColor: '#5B3281' },
+  // Formularios
+  formCard: {
+    backgroundColor: C.surface, padding: 16, borderRadius: 12,
+    marginBottom: 16, borderWidth: 1, borderColor: C.border,
+  },
+  sectionLabel: {
+    fontSize: 10, fontWeight: '800', color: C.accent,
+    letterSpacing: 2, marginBottom: 14,
+  },
+  fieldLabel: {
+    fontSize: 12, fontWeight: '700', color: C.textSec,
+    marginBottom: 6, marginTop: 4, letterSpacing: 0.5,
+  },
+  fieldRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 6,
+  },
+  input: {
+    backgroundColor: C.surfaceAlt, color: C.textPrim,
+    padding: 12, borderRadius: 8, marginBottom: 14,
+    fontSize: 14, borderWidth: 1, borderColor: C.border,
+  },
 
-  cajaGestionTiendas: { backgroundColor: '#F4F4F6', padding: 12, borderRadius: 8, marginBottom: 14, borderWidth: 1, borderColor: '#E5E5EA' },
-  miniFormTienda: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: 6, borderRadius: 6, marginBottom: 10, borderWidth: 1, borderColor: '#E5E5EA' },
-  miniInput: { flex: 1, color: '#1C1C1E', fontSize: 13, paddingVertical: 4, paddingHorizontal: 6 },
-  btnMiniGuardar: { backgroundColor: '#5B3281', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
-  filaBorrarTienda: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: '#E5E5EA', paddingHorizontal: 4 },
+  // Cantidad
+  qtyRow:  { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 16 },
+  btnQty:  {
+    width: 40, height: 40, borderRadius: 8,
+    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  qtyNum:  { fontSize: 20, fontWeight: '900', color: C.textPrim, minWidth: 24, textAlign: 'center' },
 
-  btnAñadirExtra: { backgroundColor: '#5B3281', padding: 14, borderRadius: 8, alignItems: 'center', marginTop: 4 },
-  bloqueTienda: { backgroundColor: '#ffffff', padding: 16, borderRadius: 12, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
-  tituloTienda: { color: '#5B3281', fontSize: 16, fontWeight: 'bold', marginBottom: 10 },
-  itemCompra: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#E5E5EA' },
-  txtItemCompra: { color: '#1C1C1E', fontSize: 15, fontWeight: '500' },
-  txtVacio: { color: '#8E8E93', textAlign: 'center', marginTop: 30, fontSize: 14 },
+  configLink:    { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  configLinkTxt: { color: C.accent, fontSize: 12, fontWeight: '700' },
 
-  menuInferior: { flexDirection: 'row', backgroundColor: '#ffffff', borderTopWidth: 1, borderColor: '#E5E5EA', alignItems: 'center', paddingTop: 8 },
-  btnTab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  txtTab: { color: '#8E8E93', fontSize: 11, fontWeight: '600', marginTop: 4 },
-  txtTabActivo: { color: '#5B3281' }
+  tiendaBox: {
+    backgroundColor: C.surfaceAlt, padding: 12, borderRadius: 8,
+    marginBottom: 14, borderWidth: 1, borderColor: C.border,
+  },
+  tiendaMiniForm:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  miniInput: {
+    flex: 1, color: C.textPrim, fontSize: 13,
+    backgroundColor: C.surface, paddingVertical: 8, paddingHorizontal: 10,
+    borderRadius: 6, borderWidth: 1, borderColor: C.border,
+  },
+  btnMiniSave: {
+    backgroundColor: C.accent, padding: 9, borderRadius: 6,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  tiendaListLabel: { fontSize: 10, color: C.textMuted, fontWeight: '800', letterSpacing: 1.5, marginBottom: 6 },
+  tiendaFila: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderColor: C.border,
+  },
+  tiendaFilaTxt: { color: C.textPrim, fontSize: 14 },
+
+  bloqueTienda: {
+    backgroundColor: C.surface, padding: 16, borderRadius: 12,
+    marginBottom: 14, borderWidth: 1, borderColor: C.border,
+  },
+  bloqueTiendaTitulo: {
+    fontSize: 10, fontWeight: '800', color: C.accent,
+    letterSpacing: 2, marginBottom: 12,
+  },
+  itemCompra: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 10, borderBottomWidth: 1, borderColor: C.border,
+  },
+  itemCompraTxt:    { color: C.textPrim, fontSize: 15, fontWeight: '600', flex: 1, marginRight: 10 },
+  itemCompraAcciones: { flexDirection: 'row', gap: 16, alignItems: 'center' },
+
+  emptyTxt: { color: C.textMuted, textAlign: 'center', marginTop: 40, fontSize: 14 },
+
+  // Tab bar
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: C.surface,
+    borderTopWidth: 1, borderColor: C.border,
+    alignItems: 'center', paddingTop: 6,
+  },
+  tabBtn:           { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
+  tabIconWrap:      { padding: 5 },
+  tabIconWrapActive:{},
+  tabTxt:           { color: C.textMuted, fontSize: 10, fontWeight: '700', marginTop: 2, letterSpacing: 0.5 },
+  tabTxtActive:     { color: C.accent },
 });
