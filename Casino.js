@@ -292,13 +292,17 @@ export default function Casino() {
   useEffect(() => {
     const init = async () => {
       try {
-        const nombre = await AsyncStorage.getItem('@casino_nombre');
-        const banca  = await AsyncStorage.getItem('@casino_bancarrotas');
-        const monCachadas = await AsyncStorage.getItem('@bj_monedas');
+        const nombre       = await AsyncStorage.getItem('@casino_nombre');
+        const banca        = await AsyncStorage.getItem('@casino_bancarrotas');
+        const monCachadas  = await AsyncStorage.getItem('@bj_monedas');
+        const rachaAct     = await AsyncStorage.getItem('@bj_racha_actual');
+        const rachaMax     = await AsyncStorage.getItem('@bj_racha_maxima');
         if (nombre) {
           setNombreJugador(nombre);
-          if (banca) setBancarrotas(parseInt(banca, 10));
+          if (banca)       setBancarrotas(parseInt(banca, 10));
           if (monCachadas) setMonedas(parseInt(monCachadas, 10));
+          if (rachaAct)    setRachaActual(parseInt(rachaAct, 10));
+          if (rachaMax)    setRachaMaxima(parseInt(rachaMax, 10));
           setPantallaActiva('juego');
         } else {
           setPantallaActiva('registro');
