@@ -8,10 +8,11 @@ import {
   Eye, ClipboardList, ShoppingCart, Settings,
   Plus, Minus, CheckSquare, Trash2, SlidersHorizontal,
   Save, Gamepad, AlertTriangle, WifiOff, RefreshCw,
-  Pencil, X, Receipt
+  Pencil, X, Receipt, Calendar
 } from 'lucide-react-native';
 import Casino from './Casino';
 import CuentasPena from './CuentasPena';
+import Eventos from './Eventos';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useOfflineSync } from './useOfflineSync';
 
@@ -63,6 +64,7 @@ function ContenidoApp() {
   const [modalTieneMin,  setModalTieneMin]  = useState(true);
 
   const [cuentasVisible, setCuentasVisible] = useState(false);
+  const [eventosVisible, setEventosVisible] = useState(false);
 
   const {
     productos, extras, tiendas,
@@ -261,6 +263,12 @@ function ContenidoApp() {
               <Text style={s.pendienteTxt}>{pendientes}</Text>
             </View>
           )}
+          <TouchableOpacity
+            onPress={() => setEventosVisible(true)}
+            style={{ padding: 6, borderRadius: 8, backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border, marginRight: 6 }}
+          >
+            <Calendar size={16} color={C.accent} />
+          </TouchableOpacity>
           {productosEnAlerta > 0 && (
             <View style={s.alertBadge}>
               <AlertTriangle size={13} color={C.accent} />
@@ -707,6 +715,7 @@ function ContenidoApp() {
 
       {/* CUENTAS DE LA PENA */}
       <CuentasPena visible={cuentasVisible} onClose={() => setCuentasVisible(false)} />
+      <Eventos visible={eventosVisible} onClose={() => setEventosVisible(false)} />
 
     </View>
   );
