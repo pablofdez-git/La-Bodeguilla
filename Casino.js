@@ -264,6 +264,8 @@ export default function Casino() {
   const [rascaFase, setRascaFase] = useState('comprar'); // 'comprar' | 'rascando' | 'fin'
   const [rascaMensaje, setRascaMensaje] = useState('');
   const [rascaResultadoTipo, setRascaResultadoTipo] = useState('');
+  const [rascaTiradasHoy, setRascaTiradasHoy] = useState(0); // límite diario 5 tiradas
+  const RASCA_LIMITE_DIARIO = 5;
 
   // Estados del War (Carta Alta)
   const [warApuesta, setWarApuesta] = useState(20);
@@ -297,6 +299,18 @@ export default function Casino() {
         const monCachadas  = await AsyncStorage.getItem('@bj_monedas');
         const rachaAct     = await AsyncStorage.getItem('@bj_racha_actual');
         const rachaMax     = await AsyncStorage.getItem('@bj_racha_maxima');
+        // Límite diario rasca
+        const hoy = new Date().toISOString().slice(0, 10);
+        const rascaDia     = await AsyncStorage.getItem('@rasca_dia');
+        const rascaCount   = await AsyncStorage.getItem('@rasca_count');
+        if (rascaDia === hoy && rascaCount) {
+          setRascaTiradasHoy(parseInt(rascaCount, 10));
+        } else if (rascaDia !== hoy) {
+          // Nuevo día — resetear contador
+          await AsyncStorage.setItem('@rasca_dia', hoy);
+          await AsyncStorage.setItem('@rasca_count', '0');
+          setRascaTiradasHoy(0);
+        }
         if (nombre) {
           setNombreJugador(nombre);
           if (banca)       setBancarrotas(parseInt(banca, 10));
@@ -809,11 +823,27 @@ export default function Casino() {
   // 9 símbolos para controlar bien las probabilidades
   const SIMBOLOS_RASCA = ['🍺', '🍷', '🥩', '💎', '💵', '🃏', '🎯', '🍋', '🔔'];
 
-  const comprarRasca = () => {
+  const comprarRasca = async () => {
+    // Comprobar límite diario
+    if (rascaTiradasHoy >= RASCA_LIMITE_DIARIO) {
+      Alert.alert(
+        'Límite diario alcanzado',
+        `Solo se pueden comprar ${RASCA_LIMITE_DIARIO} cartones al día. Vuelve mañana.`
+      );
+      return;
+    }
     if (monedas < rascaApuesta) {
       Alert.alert('Falta saldo', 'No tienes suficientes monedas para comprar el cartón.');
       return;
     }
+
+    // Registrar tirada
+    const nuevasTiradas = rascaTiradasHoy + 1;
+    setRascaTiradasHoy(nuevasTiradas);
+    const hoy = new Date().toISOString().slice(0, 10);
+    await AsyncStorage.setItem('@rasca_dia', hoy);
+    await AsyncStorage.setItem('@rasca_count', nuevasTiradas.toString());
+
     const saldoResta = monedas - rascaApuesta;
     setMonedas(saldoResta);
     guardarDatoCasinoLocal('@bj_monedas', saldoResta);
@@ -867,12 +897,12 @@ export default function Casino() {
       let premio = 0;
       let msg = '';
       if (maxIguales >= 3) {
-        const mult = simboloGanador === '💎' ? 80 : simboloGanador === '💵' ? 40 : 20;
+        const mult = simboloGanador === '💎' ? 25 : simboloGanador === '💵' ? 15 : 8;
         premio = rascaApuesta * mult;
         msg = `🎉 ¡TRIFECTA! ${simboloGanador}×3 — +${premio} monedas`;
         setRascaResultadoTipo('ganado');
       } else if (maxIguales === 2) {
-        premio = rascaApuesta * 4;
+        premio = rascaApuesta * 2;
         msg = `✨ Par de ${simboloGanador} — +${premio} monedas`;
         setRascaResultadoTipo('ganado');
       } else {
@@ -907,12 +937,12 @@ export default function Casino() {
     let premio = 0;
     let msg = '';
     if (maxIguales >= 3) {
-      const mult = simboloGanador === '💎' ? 80 : simboloGanador === '💵' ? 40 : 20;
+      const mult = simboloGanador === '💎' ? 25 : simboloGanador === '💵' ? 15 : 8;
       premio = rascaApuesta * mult;
       msg = `🎉 ¡TRIFECTA! ${simboloGanador}×3 — +${premio} monedas`;
       setRascaResultadoTipo('ganado');
     } else if (maxIguales === 2) {
-      premio = rascaApuesta * 4;
+      premio = rascaApuesta * 2;
       msg = `✨ Par de ${simboloGanador} — +${premio} monedas`;
       setRascaResultadoTipo('ganado');
     } else {
@@ -1370,9 +1400,9 @@ export default function Casino() {
                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
                       <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaActual(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
                       <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{apuestaActual}</Text>
-                      <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaActual(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
+                      <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaActual(a => Math.min(500, monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
                     </View>
-                    <TouchableOpacity onPress={() => setApuestaActual(monedas)} style={styles.btnTodoIn}>
+                    <TouchableOpacity onPress={() => setApuestaActual(Math.min(500, monedas))} style={styles.btnTodoIn}>
                       <Text style={styles.txtBtnTodoIn}>TODO</Text>
                     </TouchableOpacity>
                   </View>
@@ -1595,9 +1625,9 @@ export default function Casino() {
               <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
                 <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaSlots(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
                 <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{apuestaSlots}</Text>
-                <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaSlots(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
+                <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaSlots(a => Math.min(500, monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => setApuestaSlots(monedas)} style={styles.btnTodoIn}>
+              <TouchableOpacity onPress={() => setApuestaSlots(Math.min(500, monedas))} style={styles.btnTodoIn}>
                 <Text style={styles.txtBtnTodoIn}>TODO</Text>
               </TouchableOpacity>
             </View>
@@ -1677,9 +1707,9 @@ export default function Casino() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
                   <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaDados(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
                   <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{apuestaDados}</Text>
-                  <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaDados(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
+                  <TouchableOpacity style={{ padding: 10 }} onPress={() => setApuestaDados(a => Math.min(500, monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => setApuestaDados(monedas)} style={styles.btnTodoIn}>
+                <TouchableOpacity onPress={() => setApuestaDados(Math.min(500, monedas))} style={styles.btnTodoIn}>
                   <Text style={styles.txtBtnTodoIn}>TODO</Text>
                 </TouchableOpacity>
               </View>
@@ -1715,23 +1745,34 @@ export default function Casino() {
             {rascaFase === 'comprar' && (
               <View style={{ alignItems: 'center', gap: 14 }}>
                 <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 14, padding: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)', alignItems: 'center', width: '100%' }}>
-                  <Text style={{ fontSize: 42, marginBottom: 8 }}>🎟️</Text>
                   <Text style={{ color: '#fff', fontWeight: '900', fontSize: 15, marginBottom: 4 }}>CARTÓN LA BODEGUILLA</Text>
-                  <Text style={{ color: '#9CA3AF', fontSize: 11, textAlign: 'center', lineHeight: 17 }}>9 símbolos · 6 casillas · Par x4{'\n'}💎×3 paga x80 · 💵×3 paga x40 · resto ×3 paga x20</Text>
+                  <Text style={{ color: '#9CA3AF', fontSize: 11, textAlign: 'center', lineHeight: 17 }}>9 símbolos · 6 casillas · Par x2{'\n'}💎×3 → x25 · 💵×3 → x15 · resto → x8</Text>
+                  {/* Contador tiradas */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, backgroundColor: rascaTiradasHoy >= RASCA_LIMITE_DIARIO ? 'rgba(239,68,68,0.15)' : 'rgba(52,211,153,0.1)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: rascaTiradasHoy >= RASCA_LIMITE_DIARIO ? 'rgba(239,68,68,0.4)' : 'rgba(52,211,153,0.3)' }}>
+                    <Text style={{ color: rascaTiradasHoy >= RASCA_LIMITE_DIARIO ? '#F87171' : '#34D399', fontSize: 12, fontWeight: '800' }}>
+                      {rascaTiradasHoy >= RASCA_LIMITE_DIARIO
+                        ? 'Límite diario alcanzado — vuelve mañana'
+                        : `Tiradas hoy: ${rascaTiradasHoy} / ${RASCA_LIMITE_DIARIO}`}
+                    </Text>
+                  </View>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <Text style={{ fontSize: 13, fontWeight: '700', color: '#9CA3AF' }}>Precio:</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
                     <TouchableOpacity style={{ padding: 10 }} onPress={() => setRascaApuesta(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
                     <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{rascaApuesta}</Text>
-                    <TouchableOpacity style={{ padding: 10 }} onPress={() => setRascaApuesta(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
+                    <TouchableOpacity style={{ padding: 10 }} onPress={() => setRascaApuesta(a => Math.min(500, monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
                   </View>
-                  <TouchableOpacity onPress={() => setRascaApuesta(monedas)} style={styles.btnTodoIn}>
+                  <TouchableOpacity onPress={() => setRascaApuesta(Math.min(500, monedas))} style={styles.btnTodoIn}>
                     <Text style={styles.txtBtnTodoIn}>TODO</Text>
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={styles.btnIniciarJuegoPremium} onPress={comprarRasca}>
-                  <Text style={styles.txtBtnJuegoText}>🎟️ COMPRAR CARTÓN</Text>
+                <TouchableOpacity
+                  style={[styles.btnIniciarJuegoPremium, rascaTiradasHoy >= RASCA_LIMITE_DIARIO && { opacity: 0.4 }]}
+                  onPress={comprarRasca}
+                  disabled={rascaTiradasHoy >= RASCA_LIMITE_DIARIO}
+                >
+                  <Text style={styles.txtBtnJuegoText}>COMPRAR CARTÓN</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.btnSalirAlLobby} onPress={() => setJuegoSeleccionado(null)}>
                   <Text style={{ fontSize: 12, color: '#D1D5DB', fontWeight: 'bold' }}>← SALIR AL MENÚ</Text>
@@ -1913,9 +1954,9 @@ export default function Casino() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
                   <TouchableOpacity style={{ padding: 10 }} onPress={() => setWarApuesta(a => Math.max(10, a - 10))}><Minus size={14} color="#FEF08A" /></TouchableOpacity>
                   <Text style={{ minWidth: 40, textAlign: 'center', fontWeight: '900', color: '#FEF08A', fontSize: 16 }}>{warApuesta}</Text>
-                  <TouchableOpacity style={{ padding: 10 }} onPress={() => setWarApuesta(a => Math.min(monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
+                  <TouchableOpacity style={{ padding: 10 }} onPress={() => setWarApuesta(a => Math.min(500, monedas, a + 10))}><Plus size={14} color="#FEF08A" /></TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => setWarApuesta(monedas)} style={styles.btnTodoIn}>
+                <TouchableOpacity onPress={() => setWarApuesta(Math.min(500, monedas))} style={styles.btnTodoIn}>
                   <Text style={styles.txtBtnTodoIn}>TODO</Text>
                 </TouchableOpacity>
               </View>
