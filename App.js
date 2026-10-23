@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TouchableOpacity,
-  ActivityIndicator, TextInput, ScrollView, StatusBar, Alert, Modal, RefreshControl
+  ActivityIndicator, TextInput, ScrollView, StatusBar, Alert, Modal, RefreshControl, Share
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Eye, ClipboardList, ShoppingCart, Settings,
   Plus, Minus, CheckSquare, Trash2, SlidersHorizontal,
   Save, Gamepad, AlertTriangle, WifiOff, RefreshCw,
-  Pencil, X, Receipt, Calendar, CalendarDays, Search, ListPlus
+  Pencil, X, Receipt, Calendar, CalendarDays, Search, ListPlus, Share2
 } from 'lucide-react-native';
 import Casino from './Casino';
 import CuentasPena from './CuentasPena';
@@ -16,6 +16,7 @@ import Eventos, { obtenerProximoEvento, diasRestantes, tipoInfo } from './Evento
 import Toast from './Toast';
 import { C, normalizar } from './tema';
 import { mostrarToast, vibrar } from './feedback';
+import { avisarError } from './errores';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useOfflineSync } from './useOfflineSync';
 
@@ -316,6 +317,15 @@ function ContenidoApp() {
       list[t].push(e);
     });
     return list;
+  };
+
+  // Comparte la lista (por WhatsApp u otra app) agrupada por tienda
+  const handleCompartirLista = () => {
+    const bloques = Object.entries(generarListaAgrupada()).map(([tienda, items]) =>
+      `*${tienda.toUpperCase()}*\n` + items.map(i => `• ${i.nombre}`).join('\n')
+    );
+    Share.share({ message: `🛒 Lista de la compra — La Bodeguilla\n\n${bloques.join('\n\n')}` })
+      .catch(e => avisarError('No se pudo compartir la lista', e));
   };
 
   const productosFiltrados = productos.filter(p =>
@@ -636,6 +646,15 @@ function ContenidoApp() {
                   </TouchableOpacity>
                 </View>
 
+                {extras.length > 0 && (
+                  <View style={s.cabeceraLista}>
+                    <Text style={s.sectionLabel}>LISTA DE LA COMPRA · {extras.length}</Text>
+                    <TouchableOpacity style={s.btnCompartir} onPress={handleCompartirLista}>
+                      <Share2 size={14} color={C.accent} />
+                      <Text style={s.btnCompartirTxt}>COMPARTIR</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
                 {Object.keys(generarListaAgrupada()).length === 0 ? (
                   <Text style={s.emptyTxt}>La lista está vacía. Buen síntoma.</Text>
                 ) : (
@@ -1104,4 +1123,8 @@ const s = StyleSheet.create({
   chipSugerenciaTxt: { color: C.accent, fontWeight: '700', fontSize: 12 },
 
   btnGuardarRecuento: { marginHorizontal: 14, marginBottom: 10 },
+
+  cabeceraLista:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2, paddingHorizontal: 2 },
+  btnCompartir:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 14, backgroundColor: C.accentDim, borderWidth: 1, borderColor: C.accent + '55' },
+  btnCompartirTxt: { color: C.accent, fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
 });

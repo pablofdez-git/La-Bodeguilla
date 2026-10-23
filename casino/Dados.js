@@ -7,7 +7,7 @@ import { DadoVisual, CabeceraJuego, BotonSalirMenu, SelectorApuesta, BannerResul
 
 const COLORES_DADOS = coloresBannerOscuro({ fondo: 'rgba(254,240,138,0.08)', borde: '#EAB308', texto: '#FEF08A' });
 
-export function useDados({ monedas, actualizarMonedas, verificarAuxilioBancarrota }) {
+export function useDados({ monedas, actualizarMonedas, verificarAuxilioBancarrota, logro }) {
   const [apuestaDados,       setApuestaDados]       = useState(20);
   const [dadosValores,       setDadosValores]       = useState([null, null]);
   const [dadosTirandose,     setDadosTirandose]     = useState(false);
@@ -73,6 +73,7 @@ export function useDados({ monedas, actualizarMonedas, verificarAuxilioBancarrot
           setDadosMensaje(`🎯 Punto: ${suma}. ¡Sácalo antes que el 7!`);
         }
       } else if (suma === dadosPunto) {
+        logro('dados_punto');
         actualizarMonedas(saldoBase + apuestaDados * 2);
         terminarRonda(`🏆 ¡${suma}! Punto conseguido. +${apuestaDados * 2} monedas`, 'ganado');
       } else if (suma === 7) {

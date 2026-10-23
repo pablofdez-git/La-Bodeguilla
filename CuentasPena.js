@@ -2,12 +2,12 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet, Text, View, TouchableOpacity, ScrollView,
   TextInput, Modal, Alert, ActivityIndicator,
-  KeyboardAvoidingView, Platform
+  KeyboardAvoidingView, Platform, Share
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { X, Plus, Trash2, ChevronRight, Receipt, ArrowLeft, Pencil, WifiOff, RefreshCw } from 'lucide-react-native';
+import { X, Plus, Trash2, ChevronRight, Receipt, ArrowLeft, Pencil, WifiOff, RefreshCw, Share2 } from 'lucide-react-native';
 import { supabase } from './supabase';
 import { avisarError, esErrorDeRed, textoError } from './errores';
 
@@ -462,6 +462,30 @@ export default function CuentasPena({ visible, onClose }) {
   const saldos        = calcularSaldos(gastosActivos, integrantes);
   const saldosDetalle = calcularSaldos(gastosDetalle, integrantes);
 
+  // Comparte el resumen de una cuenta (por WhatsApp u otra app)
+  const compartirCuenta = (sesion, gastos, saldosSesion) => {
+    const nombre = id => integrantes.find(i => i.id === id)?.nombre || '?';
+    const personas = integrantes
+      .filter(i => saldosSesion[i.id] > 0)
+      .sort((a, b) => saldosSesion[b.id] - saldosSesion[a.id])
+      .map(i => `• ${i.nombre}: ${formatEur(saldosSesion[i.id])}`);
+    const productos = gastos.map(g => `• ${g.producto} — ${formatEur(g.coste_total)} (${g.integrantes_ids.map(nombre).join(', ')})`);
+    const total = gastos.reduce((t, g) => t + parseFloat(g.coste_total || 0), 0);
+    const mensaje =
+      `🧾 *${sesion.nombre}* — La Bodeguilla\n` +
+      `Total: ${formatEur(total)}\n\n` +
+      `*Lo que paga cada uno*\n${personas.join('\n')}\n\n` +
+      `*Productos*\n${productos.join('\n')}`;
+    Share.share({ message: mensaje }).catch(e => avisarError('No se pudo compartir la cuenta', e));
+  };
+
+  const BotonCompartir = ({ onPress }) => (
+    <TouchableOpacity onPress={onPress} style={st.btnCompartir}>
+      <Share2 size={14} color={C.accent} />
+      <Text style={st.btnCompartirTxt}>COMPARTIR POR WHATSAPP</Text>
+    </TouchableOpacity>
+  );
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => pantalla === 'sesion_activa' ? handleSalirSesion() : onClose()}>
@@ -645,6 +669,7 @@ export default function CuentasPena({ visible, onClose }) {
                       <Text style={st.saldoValor}>{formatEur(saldos[i.id])}</Text>
                     </View>
                   ))}
+                  <BotonCompartir onPress={() => compartirCuenta(sesionActiva, gastosActivos, saldos)} />
                 </View>
               )}
             </ScrollView>
@@ -678,6 +703,7 @@ export default function CuentasPena({ visible, onClose }) {
                   <Text style={[st.saldoNombre, { color: C.textPrim, fontWeight: '800' }]}>TOTAL</Text>
                   <Text style={[st.saldoValor, { color: C.accent }]}>{formatEur(sesionDetalle.total)}</Text>
                 </View>
+                <BotonCompartir onPress={() => compartirCuenta(sesionDetalle, gastosDetalle, saldosDetalle)} />
               </View>
 
               <View style={st.card}>
@@ -762,6 +788,8 @@ export default function CuentasPena({ visible, onClose }) {
 
 // ─── Estilos ─────────────────────────────────────────────────────────────────
 const st = StyleSheet.create({
+  btnCompartir:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 10, borderRadius: 8, backgroundColor: C.accentDim, borderWidth: 1, borderColor: C.accent + '55' },
+  btnCompartirTxt: { color: C.accent, fontWeight: '800', fontSize: 11, letterSpacing: 0.5 },
   root:        { flex: 1, backgroundColor: C.bg },
   centrado:    { flex: 1, justifyContent: 'center', alignItems: 'center' },
 

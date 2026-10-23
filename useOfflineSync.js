@@ -251,6 +251,23 @@ export function useOfflineSync() {
     return () => { activo = false; unsub(); };
   }, []);
 
+  // ── Tiempo real: recargar cuando otro móvil cambia algo ───────────────────
+  useEffect(() => {
+    if (!hayRed) return;
+    let temporizador = null;
+    // Varios cambios seguidos (p. ej. un recuento) → una sola recarga
+    const recargarPronto = () => {
+      clearTimeout(temporizador);
+      temporizador = setTimeout(() => { if (!procesandoRef.current) cargarDatos(); }, 400);
+    };
+    const canal = supabase.channel('bodega_cambios');
+    ['extras_compra', 'productos', 'tiendas'].forEach(table =>
+      canal.on('postgres_changes', { event: '*', schema: 'public', table }, recargarPronto)
+    );
+    canal.subscribe();
+    return () => { clearTimeout(temporizador); supabase.removeChannel(canal); };
+  }, [hayRed, cargarDatos]);
+
   // ── Ejecuta o encola una acción ───────────────────────────────────────────
   const accion = useCallback(async (op, tituloError) => {
     if (hayRedRef.current && colaRef.current.length === 0) {

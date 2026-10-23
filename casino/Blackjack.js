@@ -53,7 +53,7 @@ const finalizarMano = (manoJ, manoC, esBJNat = false) => {
 };
 
 // ── Estado y acciones ───────────────────────────────────────────────────────
-export function useBlackjack({ monedas, actualizarMonedas, verificarAuxilioBancarrota, ganarRacha, perderRacha }) {
+export function useBlackjack({ monedas, actualizarMonedas, verificarAuxilioBancarrota, ganarRacha, perderRacha, logro }) {
   const [enPartida,        setEnPartida]        = useState(false);
   const [repartiendo,      setRepartiendo]      = useState(false);
   const [baraja,           setBaraja]           = useState([]);
@@ -147,6 +147,7 @@ export function useBlackjack({ monedas, actualizarMonedas, verificarAuxilioBanca
           // Devolver apuesta (ya descontada)
           actualizarMonedas(saldoResta + apuestaActual);
         } else if (bjJ) {
+          logro('bj_natural');
           const g = resolverPago('ganado', apuestaActual, true);
           const s = saldoResta + apuestaActual + g;
           actualizarMonedas(s);

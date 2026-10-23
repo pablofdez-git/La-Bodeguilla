@@ -12,7 +12,7 @@ const tiradaAleatoria = () => [simboloAleatorio(), simboloAleatorio(), simboloAl
 const COLORES_SLOTS = { ...COLORES_BANNER_CLARO, neutro: COLORES_BANNER_CLARO.perdido };
 const SIN_MENSAJE   = { fondo: 'transparent', borde: 'transparent', texto: 'transparent' };
 
-export function useTragaperras({ monedas, actualizarMonedas, verificarAuxilioBancarrota }) {
+export function useTragaperras({ monedas, actualizarMonedas, verificarAuxilioBancarrota, logro }) {
   const [slots,              setSlots]              = useState(['🍺', '🍷', '🥩']);
   const [girandoSlots,       setGirandoSlots]       = useState(false);
   const [apuestaSlots,       setApuestaSlots]       = useState(20);
@@ -46,7 +46,7 @@ export function useTragaperras({ monedas, actualizarMonedas, verificarAuxilioBan
       // Comprobar combinaciones con la nueva dificultad diluida
       if (finalSlots[0] === finalSlots[1] && finalSlots[1] === finalSlots[2]) {
         // 3 Iguales: Premio Gordo
-        if (bola === '💎') balancePremios += apuestaSlots * 60;
+        if (bola === '💎') { balancePremios += apuestaSlots * 60; logro('slots_diamantes'); }
         else if (bola === '💵') balancePremios += apuestaSlots * 40;
         else if (bola === '🥩' || bola === '🥪') balancePremios += apuestaSlots * 25;
         else balancePremios += apuestaSlots * 15;

@@ -24,6 +24,19 @@ App móvil (Expo / React Native, JavaScript sin TypeScript) para la peña "El Ch
 - `Casino.js` — perfil del jugador, monedas, rachas, bancarrotas, lobby, registro y ranking. Llama a los hooks de cada juego (`useBlackjack`, `useRuleta`, …) para que su estado viva en el componente padre.
 - `casino/` — un archivo por juego (`Blackjack`, `Ruleta`, `Tragaperras`, `Dados`, `Rasca`, `War`), cada uno con su hook `useX(ctx)` y su componente de pantalla; `componentes.js` (piezas compartidas: `SelectorApuesta`, `CabeceraJuego`, `BannerResultado`, cartas, dado…), `estilos.js` y `datos.js` (textos de ayuda, símbolos, barajas).
 
+- `casino/Bonus.js` — bonus diario (`useBonusDiario`, AsyncStorage `@casino_bonus_dia` / `@casino_bonus_racha`). `casino/Logros.js` — lista `LOGROS`, `useLogros()` (`@casino_logros`) y pantalla de logros; los juegos los desbloquean con `ctx.logro(id)`.
+- Tiempo real: `useOfflineSync.js` escucha cambios de `extras_compra`, `productos` y `tiendas` y recarga (con un retardo de 400 ms).
+- Compartir: `Share` de react-native para la lista de la compra (`App.js`) y el resumen de cuentas (`CuentasPena.js`).
+
+## SQL necesario en Supabase
+
+```sql
+-- Realtime de la lista de la compra (si alguna tabla ya está, ejecutar las otras por separado)
+alter publication supabase_realtime add table extras_compra, productos, tiendas;
+-- Ranking semanal del casino
+alter table jugadores add column semana text, add column monedas_inicio_semana integer;
+```
+
 ## Convenciones
 
 - Código, nombres y comentarios en español.

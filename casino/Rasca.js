@@ -50,7 +50,7 @@ function evaluarCarton(casillas, apuesta) {
   if (maxIguales >= 3) {
     const mult = simboloGanador === '💎' ? 25 : simboloGanador === '💵' ? 15 : 8;
     const premio = apuesta * mult;
-    return { premio, tipo: 'ganado', msg: `🎉 ¡TRIFECTA! ${simboloGanador}×3 — +${premio} monedas` };
+    return { premio, tipo: 'ganado', trifecta: true, msg: `🎉 ¡TRIFECTA! ${simboloGanador}×3 — +${premio} monedas` };
   }
   if (maxIguales === 2) {
     const premio = apuesta * 2;
@@ -59,7 +59,7 @@ function evaluarCarton(casillas, apuesta) {
   return { premio: 0, tipo: 'perdido', msg: '❌ Sin premio. ¡Prueba otro cartón!' };
 }
 
-export function useRasca({ monedas, actualizarMonedas, verificarAuxilioBancarrota }) {
+export function useRasca({ monedas, actualizarMonedas, verificarAuxilioBancarrota, logro }) {
   const [rascaApuesta,       setRascaApuesta]       = useState(20);
   const [rascaCasillas,      setRascaCasillas]      = useState([]);
   const [rascaFase,          setRascaFase]          = useState('comprar'); // 'comprar' | 'rascando' | 'fin'
@@ -117,7 +117,8 @@ export function useRasca({ monedas, actualizarMonedas, verificarAuxilioBancarrot
   // Cobra el premio y muestra el resultado. Al rascar a mano también se
   // comprueba la bancarrota tras cobrar; con "revelar todo" solo si no hay premio.
   const resolver = (casillas, comprobarTrasPremio) => {
-    const { premio, tipo, msg } = evaluarCarton(casillas, rascaApuesta);
+    const { premio, tipo, msg, trifecta } = evaluarCarton(casillas, rascaApuesta);
+    if (trifecta) logro('rasca_trifecta');
     setRascaResultadoTipo(tipo);
     if (premio > 0) {
       const nuevoSaldo = monedas + premio;

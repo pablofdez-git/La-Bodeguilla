@@ -17,7 +17,7 @@ const APUESTAS_SIMPLES = [
   { tipo: 'impar', texto: 'IMPAR' },
 ];
 
-export function useRuleta({ monedas, actualizarMonedas, verificarAuxilioBancarrota }) {
+export function useRuleta({ monedas, actualizarMonedas, verificarAuxilioBancarrota, logro }) {
   const [fichaSeleccionada,   setFichaSeleccionada]   = useState(10);
   const [girandoRuleta,       setGirandoRuleta]       = useState(false);
   const [numeroGanadorRuleta, setNumeroGanadorRuleta] = useState(null);
@@ -95,7 +95,10 @@ export function useRuleta({ monedas, actualizarMonedas, verificarAuxilioBancarro
         if (bola % 2 === 0) balancePremios += apuestasRuleta.par * 2;
         if (bola % 2 !== 0) balancePremios += apuestasRuleta.impar * 2;
       }
-      if (apuestasRuleta.numeros[bola]) balancePremios += apuestasRuleta.numeros[bola] * 36;
+      if (apuestasRuleta.numeros[bola]) {
+        balancePremios += apuestasRuleta.numeros[bola] * 36;
+        logro('ruleta_numero');
+      }
 
       const saldoFinalCasino = monedas + balancePremios;
       actualizarMonedas(saldoFinalCasino);

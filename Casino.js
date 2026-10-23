@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Text, View, TouchableOpacity, ScrollView, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { registrarOObtenerJugador, sincronizarJugador, obtenerRanking } from './supabaseService';
+import {
+  registrarOObtenerJugador, sincronizarJugador, obtenerRanking,
+  prepararSemana, obtenerRankingSemanal, faltanColumnasSemana,
+} from './supabaseService';
 import { avisarError, esErrorDeRed } from './errores';
 import { vibrar } from './feedback';
 import { C } from './tema';
-import { Dices, Gamepad, Layers, Flame, Trophy, AlertTriangle, RefreshCw } from 'lucide-react-native';
+import { Dices, Gamepad, Layers, Flame, Trophy, AlertTriangle, RefreshCw, Award } from 'lucide-react-native';
 import { styles } from './casino/estilos';
 import { ModalAyuda } from './casino/componentes';
 import { useBlackjack, MesaBlackjack } from './casino/Blackjack';
@@ -14,6 +17,10 @@ import { useTragaperras, MaquinaTragaperras } from './casino/Tragaperras';
 import { useDados, MesaDados } from './casino/Dados';
 import { useRasca, MesaRasca } from './casino/Rasca';
 import { useWar, MesaWar } from './casino/War';
+import { useBonusDiario, ModalBonus } from './casino/Bonus';
+import { useLogros, PantallaLogros } from './casino/Logros';
+
+const SQL_SEMANA = 'alter table jugadores add column semana text, add column monedas_inicio_semana integer;';
 
 // Vibra cuando un juego termina en victoria o derrota
 function useVibrarResultado(tipo) {
@@ -54,12 +61,14 @@ export default function Casino() {
   const [modalAyuda, setModalAyuda] = useState(null);
 
   // ── Perfil y Ranking ────────────────────────────────────────────────────────
-  const [pantallaActiva, setPantallaActiva] = useState('cargando'); // 'cargando' | 'registro' | 'juego' | 'ranking'
+  const [pantallaActiva, setPantallaActiva] = useState('cargando'); // 'cargando' | 'registro' | 'juego' | 'ranking' | 'logros'
   const [nombreJugador, setNombreJugador] = useState('');
   const [inputNombre, setInputNombre] = useState('');
   const [bancarrotas, setBancarrotas] = useState(0);
   const [ranking, setRanking] = useState([]);
   const [cargandoRanking, setCargandoRanking] = useState(false);
+  const [modoRanking, setModoRanking] = useState('general'); // 'general' | 'semana'
+  const [rankingSemanal, setRankingSemanal] = useState([]);
   const [registrando, setRegistrando] = useState(false);
   const [errorRegistro, setErrorRegistro] = useState('');
 
@@ -146,15 +155,47 @@ export default function Casino() {
     }
   };
 
+  const cargarRankingSemanal = async () => {
+    setCargandoRanking(true);
+    try {
+      setRankingSemanal(await obtenerRankingSemanal());
+    } catch (e) {
+      if (faltanColumnasSemana(e)) {
+        Alert.alert('Falta preparar Supabase', `Para el ranking semanal, ejecuta esto en el SQL Editor de Supabase:\n\n${SQL_SEMANA}`);
+      } else {
+        avisarError('No se pudo cargar el ranking semanal', e);
+      }
+    } finally {
+      setCargandoRanking(false);
+    }
+  };
+
+  const cambiarModoRanking = (modo) => {
+    setModoRanking(modo);
+    if (modo === 'semana') cargarRankingSemanal();
+    else cargarRanking();
+  };
+
   const guardarDatoCasinoLocal = async (clave, valor) => {
     try { await AsyncStorage.setItem(clave, valor.toString()); } catch (e) {}
   };
 
+  const logros = useLogros();
+  const logro = logros.desbloquear;
+
+  // Saldo actual sin esperar al siguiente render (para el bonus)
+  const monedasRef = useRef(monedas);
+  monedasRef.current = monedas;
+
   // Cambia el saldo y lo guarda en el móvil
   const actualizarMonedas = (saldo) => {
     setMonedas(saldo);
+    monedasRef.current = saldo;
     guardarDatoCasinoLocal('@bj_monedas', saldo);
+    if (saldo >= 1000) logro('monedas_1000');
+    if (saldo >= 5000) logro('monedas_5000');
   };
+  const sumarMonedas = (cantidad) => actualizarMonedas(monedasRef.current + cantidad);
 
   const verificarAuxilioBancarrota = (saldoActual) => {
     if (saldoActual <= 0) {
@@ -164,6 +205,7 @@ export default function Casino() {
       setBancarrotas(nuevasBancarrotas);
       guardarDatoCasinoLocal('@casino_bancarrotas', nuevasBancarrotas);
       vibrar('aviso');
+      logro('bancarrota');
       Alert.alert('💸 Bancarrota', `Has perdido todo. Se te asignan 50 monedas para reengancharte.\nBancarrotas totales: ${nuevasBancarrotas}`);
       return saldoAuxilio;
     }
@@ -176,6 +218,9 @@ export default function Casino() {
     setRachaActual(nr);
     guardarDatoCasinoLocal('@bj_racha_actual', nr);
     if (nr > rachaMaxima) { setRachaMaxima(nr); guardarDatoCasinoLocal('@bj_racha_maxima', nr); }
+    if (nr >= 3) logro('racha_3');
+    if (nr >= 5) logro('racha_5');
+    if (nr >= 10) logro('racha_10');
   };
   const perderRacha = () => {
     setRachaActual(0);
@@ -183,7 +228,7 @@ export default function Casino() {
   };
 
   // Lo que comparten todos los juegos
-  const ctx = { monedas, actualizarMonedas, verificarAuxilioBancarrota, ganarRacha, perderRacha };
+  const ctx = { monedas, actualizarMonedas, verificarAuxilioBancarrota, ganarRacha, perderRacha, logro };
   const bj = useBlackjack(ctx);
   const ru = useRuleta(ctx);
   const tp = useTragaperras(ctx);
@@ -197,6 +242,20 @@ export default function Casino() {
   useVibrarResultado(ra.rascaResultadoTipo);
   useVibrarResultado(wa.warResultadoTipo);
   useVibrarResultado(!ru.mostrarOverlayRuleta ? '' : ru.textoOverlayRuleta.startsWith('¡HAS GANADO') ? 'ganado' : 'perdido');
+
+  const bonus = useBonusDiario({ sumarMonedas, logro });
+
+  // Al entrar al casino (una vez por sesión): empezar la semana del ranking y cobrar el bonus
+  const entradaHecha = useRef(false);
+  useEffect(() => {
+    if (pantallaActiva !== 'juego' || !nombreJugador || entradaHecha.current) return;
+    entradaHecha.current = true;
+    (async () => {
+      try { await prepararSemana(nombreJugador, monedasRef.current); }
+      catch (e) { console.warn('[Casino] Semana:', faltanColumnasSemana(e) ? `faltan columnas → ${SQL_SEMANA}` : e?.message); }
+      bonus.comprobar();
+    })();
+  }, [pantallaActiva, nombreJugador]);
 
   const salirAlMenu = () => setJuegoSeleccionado(null);
   const props = (juego) => ({ monedas, onAyuda: () => setModalAyuda(juego), onSalir: salirAlMenu });
@@ -270,25 +329,45 @@ export default function Casino() {
         </KeyboardAvoidingView>
       )}
 
+      {/* ── PANTALLA LOGROS ────────────────────────────────────────────────── */}
+      {pantallaActiva === 'logros' && (
+        <PantallaLogros desbloqueados={logros.desbloqueados} onVolver={() => setPantallaActiva('juego')} />
+      )}
+
       {/* ── PANTALLA RANKING ───────────────────────────────────────────────── */}
       {pantallaActiva === 'ranking' && (
         <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 48 }} style={{ backgroundColor: C.bg }}>
           {/* Cabecera */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 28, gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 10 }}>
             <TouchableOpacity onPress={() => setPantallaActiva('juego')} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.06)', justifyContent: 'center', alignItems: 'center' }}>
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: '300' }}>‹</Text>
             </TouchableOpacity>
             <Trophy size={20} color="#FEF08A" />
             <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', letterSpacing: 2, flex: 1 }}>RANKING</Text>
-            <TouchableOpacity onPress={cargarRanking} style={{ padding: 8 }}>
+            <TouchableOpacity onPress={() => cambiarModoRanking(modoRanking)} style={{ padding: 8 }}>
               <RefreshCw size={16} color="#6B7280" />
             </TouchableOpacity>
           </View>
 
-          {/* Leyenda fórmula */}
+          {/* Pestañas */}
+          <View style={{ flexDirection: 'row', backgroundColor: C.surface, borderRadius: 10, padding: 4, marginBottom: 14, borderWidth: 1, borderColor: C.border }}>
+            {[['general', 'GENERAL'], ['semana', 'ESTA SEMANA']].map(([modo, texto]) => (
+              <TouchableOpacity
+                key={modo}
+                onPress={() => cambiarModoRanking(modo)}
+                style={{ flex: 1, paddingVertical: 9, borderRadius: 7, alignItems: 'center', backgroundColor: modoRanking === modo ? 'rgba(254,240,138,0.14)' : 'transparent' }}
+              >
+                <Text style={{ color: modoRanking === modo ? '#FEF08A' : '#6B7280', fontWeight: '900', fontSize: 12, letterSpacing: 1 }}>{texto}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Leyenda */}
           <View style={{ backgroundColor: 'rgba(254,240,138,0.06)', borderRadius: 10, padding: 12, borderWidth: 1, borderColor: 'rgba(254,240,138,0.15)', marginBottom: 20 }}>
             <Text style={{ color: '#FEF08A', fontSize: 11, fontWeight: '700', textAlign: 'center', letterSpacing: 0.5 }}>
-              Puntos = monedas × (1 − bancarrotas × 0.08) · mínimo ×0.2
+              {modoRanking === 'general'
+                ? 'Puntos = monedas × (1 − bancarrotas × 0.08) · mínimo ×0.2'
+                : 'Monedas ganadas desde el lunes · se reinicia cada semana'}
             </Text>
           </View>
 
@@ -296,9 +375,11 @@ export default function Casino() {
             <ActivityIndicator color="#FEF08A" size="large" style={{ marginTop: 40 }} />
           ) : (
             <View style={{ gap: 8 }}>
-              {ranking.map((j, idx) => {
+              {(modoRanking === 'general' ? ranking : rankingSemanal).map((j, idx) => {
                 const medalla = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : null;
                 const esTu = j.nombre === nombreJugador;
+                const valor = modoRanking === 'general' ? j.puntuacion : `${j.ganancia > 0 ? '+' : ''}${j.ganancia}`;
+                const colorValor = modoRanking === 'general' || j.ganancia >= 0 ? '#FEF08A' : '#F87171';
                 return (
                   <View key={j.nombre} style={{
                     backgroundColor: esTu ? 'rgba(124,58,237,0.18)' : C.surface,
@@ -328,17 +409,19 @@ export default function Casino() {
 
                     {/* Puntuación */}
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ color: '#FEF08A', fontWeight: '900', fontSize: 18 }}>{j.puntuacion}</Text>
-                      <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '600' }}>pts</Text>
+                      <Text style={{ color: colorValor, fontWeight: '900', fontSize: 18 }}>{valor}</Text>
+                      <Text style={{ color: '#6B7280', fontSize: 10, fontWeight: '600' }}>{modoRanking === 'general' ? 'pts' : 'monedas'}</Text>
                     </View>
                   </View>
                 );
               })}
 
-              {ranking.length === 0 && (
+              {(modoRanking === 'general' ? ranking : rankingSemanal).length === 0 && (
                 <View style={{ alignItems: 'center', paddingVertical: 50 }}>
                   <Text style={{ color: '#6B7280', fontSize: 14, fontWeight: '600', textAlign: 'center' }}>
-                    Aún no hay nadie en el ranking.{'\n'}¡Sé el primero en jugar!
+                    {modoRanking === 'general'
+                      ? 'Aún no hay nadie en el ranking.\n¡Sé el primero en jugar!'
+                      : 'Nadie ha jugado todavía esta semana.'}
                   </Text>
                 </View>
               )}
@@ -353,12 +436,17 @@ export default function Casino() {
           <View style={styles.tableroCasinoPremium}>
 
             <ModalAyuda juego={modalAyuda} onCerrar={() => setModalAyuda(null)} />
+            <ModalBonus bonus={bonus.bonus} onCerrar={bonus.cerrar} />
 
             {/* Barra del jugador: ranking + nombre + saldo */}
             <View style={styles.cabeceraCasinoMesa}>
-              <TouchableOpacity onPress={() => { cargarRanking(); setPantallaActiva('ranking'); }} style={styles.btnRankingHud}>
+              <TouchableOpacity onPress={() => { cambiarModoRanking(modoRanking); setPantallaActiva('ranking'); }} style={styles.btnRankingHud}>
                 <Trophy size={14} color="#FEF08A" />
                 <Text style={styles.txtRankingHud}>RANKING</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setPantallaActiva('logros')} style={[styles.btnRankingHud, { marginLeft: 6, marginRight: 'auto' }]}>
+                <Award size={14} color="#FEF08A" />
+                <Text style={styles.txtRankingHud}>{logros.conseguidos}/{logros.total}</Text>
               </TouchableOpacity>
               <View style={styles.hudMonedasPill}>
                 <Text style={{ color: '#C4B5FD', fontWeight: '700', fontSize: 11, marginRight: 5 }}>{nombreJugador}</Text>

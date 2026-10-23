@@ -11,7 +11,7 @@ const COLORES_WAR = coloresBannerOscuro({ fondo: 'rgba(245,158,11,0.1)', borde: 
 const mezclar = () => [...BARAJA_WAR].sort(() => Math.random() - 0.5);
 const mejorCarta = (cartas) => cartas.reduce((m, c) => c.valor > m.valor ? c : m);
 
-export function useWar({ monedas, actualizarMonedas, verificarAuxilioBancarrota }) {
+export function useWar({ monedas, actualizarMonedas, verificarAuxilioBancarrota, logro }) {
   const [warApuesta,       setWarApuesta]       = useState(20);
   const [warCartaJugador,  setWarCartaJugador]  = useState(null);
   const [warCartaCrupier,  setWarCartaCrupier]  = useState(null);
@@ -80,6 +80,7 @@ export function useWar({ monedas, actualizarMonedas, verificarAuxilioBancarrota 
 
       if (cJugador.valor >= cCrupier.valor) {
         // Gana la guerra: devuelve las 2 apuestas + x6 sobre la apuesta original (premio gordo)
+        logro('war_guerra');
         actualizarMonedas(saldoResta + warApuesta * 6);
         setWarMensaje(`🔥 ¡GUERRA GANADA! ${cJugador.nombre}${cJugador.palo} vs ${cCrupier.nombre}${cCrupier.palo} · +${warApuesta * 6} monedas`);
         setWarResultadoTipo('ganado');
