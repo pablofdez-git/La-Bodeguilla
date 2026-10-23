@@ -35,6 +35,7 @@ export async function registrarOObtenerJugador(nombre) {
 
 // ── Sincronizar monedas y bancarrotas ───────────────────────────────────────
 // Se llama automáticamente cada vez que cambian monedas o bancarrotas en el casino.
+// Devuelve el error de Supabase (o null si ha ido bien).
 export async function sincronizarJugador({ nombre, monedas, bancarrotas }) {
   const { error } = await supabase
     .from('jugadores')
@@ -42,7 +43,7 @@ export async function sincronizarJugador({ nombre, monedas, bancarrotas }) {
     .eq('nombre', nombre);
 
   if (error) console.warn('[Casino] Error sincronizando jugador:', error.message);
-  return !error;
+  return error || null;
 }
 
 // ── Obtener ranking (top 20 por puntuación) ─────────────────────────────────
@@ -55,7 +56,7 @@ export async function obtenerRanking() {
 
   if (error) {
     console.warn('[Casino] Error cargando ranking:', error.message);
-    return null;
+    throw error;
   }
   return data;
 }

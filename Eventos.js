@@ -7,6 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X, Plus, Trash2, Calendar, Clock } from 'lucide-react-native';
 import { supabase } from './supabase';
+import { avisarError } from './errores';
 
 const C = {
   bg: '#131215', surface: '#1C1A20', surfaceAlt: '#252229',
@@ -54,8 +55,9 @@ const diasRestantes = iso => {
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 async function getEventos() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('eventos').select('*').order('fecha', { ascending: true });
+  if (error) throw error;
   return data || [];
 }
 async function insertEvento(nombre, fecha, hora, tipo, notas) {
@@ -64,7 +66,8 @@ async function insertEvento(nombre, fecha, hora, tipo, notas) {
   if (error) throw error;
 }
 async function deleteEvento(id) {
-  await supabase.from('eventos').delete().eq('id', id);
+  const { error } = await supabase.from('eventos').delete().eq('id', id);
+  if (error) throw error;
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -84,7 +87,7 @@ export default function Eventos({ visible, onClose }) {
   const cargar = useCallback(async () => {
     setCargando(true);
     try { setEventos(await getEventos()); }
-    catch { Alert.alert('Error', 'No se pudieron cargar los eventos.'); }
+    catch (e) { avisarError('No se pudieron cargar los eventos', e); }
     finally { setCargando(false); }
   }, []);
 
@@ -110,7 +113,7 @@ export default function Eventos({ visible, onClose }) {
     try {
       await insertEvento(fNombre.trim(), fechaISO, fHora.trim() || null, fTipo, fNotas.trim() || null);
       resetForm(); setMostrarForm(false); await cargar();
-    } catch { Alert.alert('Error', 'No se pudo guardar el evento.'); }
+    } catch (e) { avisarError('No se pudo guardar el evento', e); }
     finally { setGuardando(false); }
   };
 
@@ -118,7 +121,9 @@ export default function Eventos({ visible, onClose }) {
     Alert.alert('Eliminar evento', `¿Eliminar "${ev.nombre}"?`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: async () => {
-        await deleteEvento(ev.id); await cargar();
+        try { await deleteEvento(ev.id); }
+        catch (e) { avisarError('No se pudo eliminar el evento', e); }
+        await cargar();
       }},
     ]);
   };

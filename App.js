@@ -130,16 +130,17 @@ function ContenidoApp() {
     // Copiar el stock antes de cambiar de pestaña para que el useEffect no lo resetee
     const stockAGuardar = { ...stockTemporal };
     setPestanaActual('visual');
-    await syncGuardarRecuento(stockAGuardar);
-    if (!hayRed) Alert.alert('Guardado sin conexion', 'El recuento se subira solo cuando vuelva la cobertura.');
-    else Alert.alert('Listo', 'Recuento guardado.');
+    const res = await syncGuardarRecuento(stockAGuardar);
+    if (res === 'encolado') Alert.alert('Guardado sin conexion', 'El recuento se subira solo cuando vuelva la cobertura.');
+    else if (res === 'ok') Alert.alert('Listo', 'Recuento guardado.');
   };
 
   // ── Compra ────────────────────────────────────────────────────────────────
   const handleAnadirALaCompra = async () => {
     if (!nombreCompra.trim()) { Alert.alert('Falta el nombre', 'Pon que hay que comprar.'); return; }
     const item = `${nombreCompra.trim()} (x${cantidadCompra})`;
-    await anadirExtra(item, lugarCompra);
+    const res = await anadirExtra(item, lugarCompra);
+    if (res === 'error') return;
     setNombreCompra(''); setCantidadCompra(1);
   };
 
@@ -148,14 +149,16 @@ function ContenidoApp() {
     const nombre = nuevaTiendaNombre.trim();
     const yaExiste = tiendas.some(t => t.nombre.toLowerCase() === nombre.toLowerCase());
     if (yaExiste) { Alert.alert('Aviso', 'Ese sitio ya esta en la lista.'); return; }
-    await insertarTienda(nombre);
+    const res = await insertarTienda(nombre);
+    if (res === 'error') return;
     setLugarCompra(nombre);
     setNuevaTiendaNombre('');
     setMostrandoAnadirTienda(false);
   };
 
   const handleEliminarTienda = async (id, nombre) => {
-    await eliminarTienda(id);
+    const res = await eliminarTienda(id);
+    if (res === 'error') return;
     if (lugarCompra === nombre) setLugarCompra(tiendas.find(t => t.id !== id)?.nombre || '');
   };
 
@@ -165,9 +168,9 @@ function ContenidoApp() {
     let nombreReal = nombreItem, cantidad = 1;
     if (m) { nombreReal = m[1].trim(); cantidad = parseInt(m[2], 10); }
     const prod = productos.find(p => p.nombre.toLowerCase().trim() === nombreReal.toLowerCase());
-    await marcarComprado(id, prod?.id || null, prod ? cantidad : 0);
-    if (prod) {
-      if (!hayRed) Alert.alert('Sin conexion', `Se sumara +${cantidad} a "${prod.nombre}" cuando vuelva la cobertura.`);
+    const res = await marcarComprado(id, prod?.id || null, prod ? cantidad : 0);
+    if (prod && res !== 'error') {
+      if (res === 'encolado') Alert.alert('Sin conexion', `Se sumara +${cantidad} a "${prod.nombre}" cuando vuelva la cobertura.`);
       else Alert.alert('Comprado', `+${cantidad} a "${prod.nombre}".`);
     }
   };
@@ -182,8 +185,10 @@ function ContenidoApp() {
     }
     const yaExiste = productos.some(p => p.nombre.toLowerCase().trim() === nuevoProdNombre.trim().toLowerCase());
     if (yaExiste) { Alert.alert('Aviso', 'Ese producto ya existe.'); return; }
-    await insertarProducto(nuevoProdNombre.trim(), nuevoProdCategoria, min);
-    Alert.alert('Registrado', `"${nuevoProdNombre.trim()}" anadido.`);
+    const res = await insertarProducto(nuevoProdNombre.trim(), nuevoProdCategoria, min);
+    if (res === 'error') return;
+    if (res === 'encolado') Alert.alert('Registrado sin conexion', `"${nuevoProdNombre.trim()}" se subira cuando vuelva la cobertura.`);
+    else Alert.alert('Registrado', `"${nuevoProdNombre.trim()}" anadido.`);
     setNuevoProdNombre(''); setNuevoProdMinimo('2'); setNuevoProdTieneMin(true);
   };
 
@@ -202,11 +207,12 @@ function ContenidoApp() {
       min = parseInt(modalMinimo, 10);
       if (isNaN(min) || min < 0) { Alert.alert('Falta campo', 'El minimo debe ser un numero.'); return; }
     }
-    await editarProducto(modalProd.id, {
+    const res = await editarProducto(modalProd.id, {
       nombre: modalNombre.trim(),
       categoria: modalCategoria,
       stock_minimo: min,
     });
+    if (res === 'error') return;
     setModalProd(null);
   };
 

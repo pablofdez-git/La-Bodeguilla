@@ -9,6 +9,7 @@ import NetInfo from '@react-native-community/netinfo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { X, Plus, Trash2, ChevronRight, Receipt, ArrowLeft, Pencil, WifiOff, RefreshCw } from 'lucide-react-native';
 import { supabase } from './supabase';
+import { avisarError, esErrorDeRed, textoError } from './errores';
 
 // ─── Colores (idénticos a App.js) ───────────────────────────────────────────
 const C = {
@@ -78,24 +79,32 @@ async function apiInsertarGasto(sesionId, producto, costeTotal, integrantesIds) 
   const costePorPersona = parseFloat((costeTotal / integrantesIds.length).toFixed(2));
   const { data: gasto, error } = await supabase.from('gastos').insert({ sesion_id: sesionId, producto, coste_total: costeTotal, integrantes_ids: integrantesIds, coste_por_persona: costePorPersona }).select().single();
   if (error) throw error;
-  const { data: sesion } = await supabase.from('sesiones_compra').select('total,num_productos').eq('id', sesionId).single();
-  await supabase.from('sesiones_compra').update({ total: parseFloat(((sesion?.total || 0) + costeTotal).toFixed(2)), num_productos: (sesion?.num_productos || 0) + 1 }).eq('id', sesionId);
+  const { data: sesion, error: errSesion } = await supabase.from('sesiones_compra').select('total,num_productos').eq('id', sesionId).single();
+  if (errSesion) throw errSesion;
+  const { error: errTotal } = await supabase.from('sesiones_compra').update({ total: parseFloat(((sesion?.total || 0) + costeTotal).toFixed(2)), num_productos: (sesion?.num_productos || 0) + 1 }).eq('id', sesionId);
+  if (errTotal) throw errTotal;
   return gasto;
 }
 async function apiEliminarGasto(gastoId, sesionId, costeTotal) {
-  await supabase.from('gastos').delete().eq('id', gastoId);
-  const { data: sesion } = await supabase.from('sesiones_compra').select('total,num_productos').eq('id', sesionId).single();
-  await supabase.from('sesiones_compra').update({ total: Math.max(0, parseFloat(((sesion?.total || 0) - costeTotal).toFixed(2))), num_productos: Math.max(0, (sesion?.num_productos || 0) - 1) }).eq('id', sesionId);
+  const { error } = await supabase.from('gastos').delete().eq('id', gastoId);
+  if (error) throw error;
+  const { data: sesion, error: errSesion } = await supabase.from('sesiones_compra').select('total,num_productos').eq('id', sesionId).single();
+  if (errSesion) throw errSesion;
+  const { error: errTotal } = await supabase.from('sesiones_compra').update({ total: Math.max(0, parseFloat(((sesion?.total || 0) - costeTotal).toFixed(2))), num_productos: Math.max(0, (sesion?.num_productos || 0) - 1) }).eq('id', sesionId);
+  if (errTotal) throw errTotal;
 }
 async function apiEditarGasto(gastoId, integrantesIds, costeTotal) {
   const costePorPersona = parseFloat((costeTotal / integrantesIds.length).toFixed(2));
-  await supabase.from('gastos').update({ integrantes_ids: integrantesIds, coste_por_persona: costePorPersona }).eq('id', gastoId);
+  const { error } = await supabase.from('gastos').update({ integrantes_ids: integrantesIds, coste_por_persona: costePorPersona }).eq('id', gastoId);
+  if (error) throw error;
 }
 async function apiCerrarSesion(sesionId) {
-  await supabase.from('sesiones_compra').update({ cerrada: true }).eq('id', sesionId);
+  const { error } = await supabase.from('sesiones_compra').update({ cerrada: true }).eq('id', sesionId);
+  if (error) throw error;
 }
 async function apiEliminarSesion(sesionId) {
-  await supabase.from('sesiones_compra').delete().eq('id', sesionId);
+  const { error } = await supabase.from('sesiones_compra').delete().eq('id', sesionId);
+  if (error) throw error;
 }
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -172,6 +181,7 @@ export default function CuentasPena({ visible, onClose }) {
       return;
     }
     const fallidas = [];
+    const rechazadas = [];
     for (const op of cola) {
       try {
         if (op.tipo === 'insertar_gasto')
@@ -186,8 +196,12 @@ export default function CuentasPena({ visible, onClose }) {
           await apiCerrarSesion(op.sesionId);
         else if (op.tipo === 'eliminar_sesion')
           await apiEliminarSesion(op.sesionId);
-      } catch { fallidas.push(op); }
+      } catch (e) {
+        if (esErrorDeRed(e)) fallidas.push(op);
+        else rechazadas.push(`· ${op.tipo}: ${textoError(e)}`);
+      }
     }
+    if (rechazadas.length > 0) avisarError('Algunos cambios offline no se pudieron subir', rechazadas.join('\n'));
     // Siempre guardar el resultado (aunque todo haya fallado)
     await guardarCola(fallidas);
     // Siempre actualizar pendientes aunque falle el recargar
@@ -241,7 +255,8 @@ export default function CuentasPena({ visible, onClose }) {
         setIntegrantes(cache.integrantes);
         setSesiones(cache.sesiones);
       }
-    } catch {
+    } catch (e) {
+      if (!esErrorDeRed(e)) avisarError('No se pudieron cargar las cuentas', e);
       const cache = await cargarCacheLocal();
       setIntegrantes(cache.integrantes);
       setSesiones(cache.sesiones);
@@ -275,12 +290,17 @@ export default function CuentasPena({ visible, onClose }) {
   const recargarGastosActivos = async () => {
     if (!sesionActiva) return;
     let gastos;
-    if (hayRed) {
-      gastos = await apiCargarGastos(sesionActiva.id);
-      await guardarGastosLocal(sesionActiva.id, gastos);
-      const { data } = await supabase.from('sesiones_compra').select('total,num_productos').eq('id', sesionActiva.id).single();
-      if (data) setSesionActiva(prev => ({ ...prev, ...data }));
-    } else {
+    try {
+      if (hayRed) {
+        gastos = await apiCargarGastos(sesionActiva.id);
+        await guardarGastosLocal(sesionActiva.id, gastos);
+        const { data } = await supabase.from('sesiones_compra').select('total,num_productos').eq('id', sesionActiva.id).single();
+        if (data) setSesionActiva(prev => ({ ...prev, ...data }));
+      } else {
+        gastos = await cargarGastosLocal(sesionActiva.id);
+      }
+    } catch (e) {
+      if (!esErrorDeRed(e)) avisarError('No se pudieron cargar los gastos', e);
       gastos = await cargarGastosLocal(sesionActiva.id);
     }
     setGastosActivos(gastos);
@@ -312,7 +332,7 @@ export default function CuentasPena({ visible, onClose }) {
       setFormProducto(''); setFormCoste(''); setFormSeleccionados([]);
       setPantalla('sesion_activa');
     } catch (e) {
-      Alert.alert('Error', 'No se pudo crear la sesión.');
+      avisarError('No se pudo crear la sesión', e);
     } finally {
       setCargando(false);
     }
@@ -340,7 +360,7 @@ export default function CuentasPena({ visible, onClose }) {
       }
       setFormProducto(''); setFormCoste(''); setFormSeleccionados([]);
     } catch (e) {
-      Alert.alert('Error', 'No se pudo guardar el gasto.');
+      avisarError('No se pudo guardar el gasto', e);
     } finally {
       setGuardandoGasto(false);
     }
@@ -351,8 +371,10 @@ export default function CuentasPena({ visible, onClose }) {
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Eliminar', style: 'destructive', onPress: async () => {
         if (hayRed) {
-          await apiEliminarGasto(gasto.id, sesionActiva.id, gasto.coste_total);
-          await recargarGastosActivos();
+          try {
+            await apiEliminarGasto(gasto.id, sesionActiva.id, gasto.coste_total);
+            await recargarGastosActivos();
+          } catch (e) { avisarError('No se pudo eliminar el gasto', e); }
         } else {
           const nuevos = gastosActivos.filter(g => g.id !== gasto.id);
           setGastosActivos(nuevos);
@@ -370,8 +392,10 @@ export default function CuentasPena({ visible, onClose }) {
     if (editIntegrantes.length === 0) { Alert.alert('Sin asignar', 'Selecciona al menos un integrante.'); return; }
     const costePorPersona = parseFloat((gastoEditando.coste_total / editIntegrantes.length).toFixed(2));
     if (hayRed) {
-      await apiEditarGasto(gastoEditando.id, editIntegrantes, gastoEditando.coste_total);
-      await recargarGastosActivos();
+      try {
+        await apiEditarGasto(gastoEditando.id, editIntegrantes, gastoEditando.coste_total);
+        await recargarGastosActivos();
+      } catch (e) { avisarError('No se pudo editar el gasto', e); return; }
     } else {
       const nuevos = gastosActivos.map(g => g.id === gastoEditando.id ? { ...g, integrantes_ids: editIntegrantes, coste_por_persona: costePorPersona } : g);
       setGastosActivos(nuevos);
@@ -385,7 +409,10 @@ export default function CuentasPena({ visible, onClose }) {
     Alert.alert('Cerrar cuenta', '¿Cerrar esta sesión? Quedará guardada en el historial.', [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Cerrar', onPress: async () => {
-        if (hayRed) await apiCerrarSesion(sesionActiva.id);
+        if (hayRed) {
+          try { await apiCerrarSesion(sesionActiva.id); }
+          catch (e) { avisarError('No se pudo cerrar la sesión', e); return; }
+        }
         else await encolarOperacion({ tipo: 'cerrar_sesion', sesionId: sesionActiva.id });
         setSesionActiva(null); setGastosActivos([]);
         await recargar(); setPantalla('lista');
@@ -404,7 +431,10 @@ export default function CuentasPena({ visible, onClose }) {
     Alert.alert('Borrar compra', `¿Eliminar "${sesion.nombre}"? No se puede deshacer.`, [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Borrar', style: 'destructive', onPress: async () => {
-        if (hayRed) await apiEliminarSesion(sesion.id);
+        if (hayRed) {
+          try { await apiEliminarSesion(sesion.id); }
+          catch (e) { avisarError('No se pudo borrar la compra', e); return; }
+        }
         else await encolarOperacion({ tipo: 'eliminar_sesion', sesionId: sesion.id });
         await recargar();
       }},
@@ -414,10 +444,15 @@ export default function CuentasPena({ visible, onClose }) {
   const handleVerDetalle = async (sesion) => {
     setSesionDetalle(sesion);
     let gastos;
-    if (hayRed) {
-      gastos = await apiCargarGastos(sesion.id);
-      await guardarGastosLocal(sesion.id, gastos);
-    } else {
+    try {
+      if (hayRed) {
+        gastos = await apiCargarGastos(sesion.id);
+        await guardarGastosLocal(sesion.id, gastos);
+      } else {
+        gastos = await cargarGastosLocal(sesion.id);
+      }
+    } catch (e) {
+      if (!esErrorDeRed(e)) avisarError('No se pudo cargar el detalle', e);
       gastos = await cargarGastosLocal(sesion.id);
     }
     setGastosDetalle(gastos);
