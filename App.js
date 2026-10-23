@@ -1,41 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet, Text, View, FlatList, TouchableOpacity,
-  ActivityIndicator, TextInput, ScrollView, StatusBar, Alert, Modal
+  ActivityIndicator, TextInput, ScrollView, StatusBar, Alert, Modal, RefreshControl
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Eye, ClipboardList, ShoppingCart, Settings,
   Plus, Minus, CheckSquare, Trash2, SlidersHorizontal,
   Save, Gamepad, AlertTriangle, WifiOff, RefreshCw,
-  Pencil, X, Receipt, Calendar
+  Pencil, X, Receipt, Calendar, CalendarDays, Search, ListPlus
 } from 'lucide-react-native';
 import Casino from './Casino';
 import CuentasPena from './CuentasPena';
-import Eventos from './Eventos';
+import Eventos, { obtenerProximoEvento, diasRestantes, tipoInfo } from './Eventos';
+import Toast from './Toast';
+import { C, normalizar } from './tema';
+import { mostrarToast, vibrar } from './feedback';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useOfflineSync } from './useOfflineSync';
 
 const CATEGORIAS      = ['Todos', 'Bebidas', 'Mezcla', 'Limpieza', 'Otros'];
 const CATEGORIAS_FORM = ['Bebidas', 'Mezcla', 'Limpieza', 'Otros'];
 
-const C = {
-  bg:           '#131215',
-  surface:      '#1C1A20',
-  surfaceAlt:   '#252229',
-  border:       '#332F3C',
-  accent:       '#9B6DCC',
-  accentDim:    '#2A1F3D',
-  success:      '#2D9E5F',
-  danger:       '#C94A3F',
-  dangerDim:    '#3A1210',
-  warning:      '#C9921A',
-  warningDim:   '#3A2A08',
-  textPrim:     '#EDE9F4',
-  textSec:      '#9890A8',
-  textMuted:    '#5A5466',
-  white:        '#FFFFFF',
-};
 
 function ContenidoApp() {
   const insets = useSafeAreaInsets();
@@ -66,9 +52,14 @@ function ContenidoApp() {
   const [cuentasVisible, setCuentasVisible] = useState(false);
   const [eventosVisible, setEventosVisible] = useState(false);
 
+  const [busqueda,       setBusqueda]       = useState('');
+  const [refrescando,    setRefrescando]    = useState(false);
+  const [proximoEvento,  setProximoEvento]  = useState(null);
+
   const {
     productos, extras, tiendas,
     cargando, hayRed, pendientes,
+    recargar,
     guardarRecuento: syncGuardarRecuento,
     anadirExtra,
     marcarComprado,
@@ -80,6 +71,18 @@ function ContenidoApp() {
   } = useOfflineSync();
 
   const recuentoInicializado = React.useRef(false);
+
+  // Próximo evento del calendario (al abrir la app y al cerrar el calendario)
+  useEffect(() => {
+    if (eventosVisible || !hayRed) return;
+    obtenerProximoEvento().then(setProximoEvento).catch(() => {});
+  }, [eventosVisible, hayRed]);
+
+  const onRefrescar = async () => {
+    setRefrescando(true);
+    await recargar();
+    setRefrescando(false);
+  };
 
   useEffect(() => {
     if (tiendas.length > 0 && !lugarCompra) setLugarCompra(tiendas[0].nombre);
@@ -126,29 +129,97 @@ function ContenidoApp() {
     if (!isNaN(num) && num >= 0) setStockTemporal(prev => ({ ...prev, [id]: num }));
   };
 
-  const handleGuardarRecuento = async () => {
+  const cambiosRecuento = productos.filter(
+    p => stockTemporal[p.id] !== undefined && stockTemporal[p.id] !== p.stock_actual
+  ).length;
+
+  const handleGuardarRecuento = async (destino = 'visual') => {
     // Copiar el stock antes de cambiar de pestaña para que el useEffect no lo resetee
     const stockAGuardar = { ...stockTemporal };
-    setPestanaActual('visual');
+    setPestanaActual(destino);
     const res = await syncGuardarRecuento(stockAGuardar);
-    if (res === 'encolado') Alert.alert('Guardado sin conexion', 'El recuento se subira solo cuando vuelva la cobertura.');
-    else if (res === 'ok') Alert.alert('Listo', 'Recuento guardado.');
+    if (res === 'encolado') mostrarToast('Recuento guardado sin conexión. Se subirá al volver la cobertura.', 'aviso');
+    else if (res === 'ok') mostrarToast('Recuento guardado.');
+  };
+
+  // Al salir del recuento con cambios sin guardar, preguntar
+  const cambiarPestana = (id) => {
+    if (pestanaActual === 'recuento' && id !== 'recuento' && cambiosRecuento > 0) {
+      Alert.alert(
+        'Recuento sin guardar',
+        `Tienes ${cambiosRecuento} cambio${cambiosRecuento > 1 ? 's' : ''} sin guardar.`,
+        [
+          { text: 'Seguir contando', style: 'cancel' },
+          { text: 'Descartar', style: 'destructive', onPress: () => setPestanaActual(id) },
+          { text: 'Guardar', onPress: () => handleGuardarRecuento(id) },
+        ]
+      );
+      return;
+    }
+    setPestanaActual(id);
   };
 
   // ── Compra ────────────────────────────────────────────────────────────────
   const handleAnadirALaCompra = async () => {
-    if (!nombreCompra.trim()) { Alert.alert('Falta el nombre', 'Pon que hay que comprar.'); return; }
+    if (!nombreCompra.trim()) { Alert.alert('Falta el nombre', 'Pon qué hay que comprar.'); return; }
     const item = `${nombreCompra.trim()} (x${cantidadCompra})`;
     const res = await anadirExtra(item, lugarCompra);
     if (res === 'error') return;
+    vibrar();
+    if (res === 'encolado') mostrarToast('Apuntado sin conexión. Se subirá al volver la cobertura.', 'aviso');
+    else mostrarToast(`Apuntado: ${item}`);
     setNombreCompra(''); setCantidadCompra(1);
+  };
+
+  // Sugerencias de productos existentes mientras se escribe en Compra
+  const sugerenciasCompra = nombreCompra.trim().length >= 2
+    ? productos.filter(p => {
+        const n = normalizar(p.nombre), q = normalizar(nombreCompra);
+        return n.includes(q) && n !== q;
+      }).slice(0, 5)
+    : [];
+
+  const elegirSugerencia = (p) => {
+    setNombreCompra(p.nombre);
+    // Si está bajo mínimo, propone la cantidad que falta
+    if (p.stock_minimo !== null && p.stock_actual < p.stock_minimo) setCantidadCompra(p.stock_minimo - p.stock_actual);
+  };
+
+  // Apunta en la lista todo lo que está bajo mínimo y aún no está apuntado
+  const handleApuntarFaltantes = () => {
+    const yaEnLista = new Set(extras.map(e => normalizar(e.nombre.replace(/\s*\(x\d+\)$/, ''))));
+    const nuevos = productos.filter(
+      p => p.stock_minimo !== null && p.stock_actual < p.stock_minimo && !yaEnLista.has(normalizar(p.nombre))
+    );
+    if (nuevos.length === 0) { mostrarToast('Todo lo que falta ya está en la lista.', 'info'); return; }
+    const lugar = lugarCompra || tiendas[0]?.nombre || '';
+    Alert.alert(
+      'Apuntar lo que falta',
+      `Se añadirán ${nuevos.length} producto${nuevos.length > 1 ? 's' : ''} a la compra${lugar ? ` (${lugar})` : ''}:\n\n` +
+        nuevos.map(p => `· ${p.nombre} (x${p.stock_minimo - p.stock_actual})`).join('\n'),
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Apuntar', onPress: async () => {
+          let apuntados = 0, sinRed = false;
+          for (const p of nuevos) {
+            const res = await anadirExtra(`${p.nombre} (x${p.stock_minimo - p.stock_actual})`, lugar);
+            if (res === 'error') break;
+            apuntados++;
+            if (res === 'encolado') sinRed = true;
+          }
+          if (apuntados === 0) return;
+          vibrar('exito');
+          mostrarToast(`${apuntados} apuntado${apuntados > 1 ? 's' : ''} en la lista${sinRed ? ' (sin conexión)' : ''}.`, sinRed ? 'aviso' : 'exito');
+        }},
+      ]
+    );
   };
 
   const handleRegistrarTienda = async () => {
     if (!nuevaTiendaNombre.trim()) return;
     const nombre = nuevaTiendaNombre.trim();
     const yaExiste = tiendas.some(t => t.nombre.toLowerCase() === nombre.toLowerCase());
-    if (yaExiste) { Alert.alert('Aviso', 'Ese sitio ya esta en la lista.'); return; }
+    if (yaExiste) { Alert.alert('Aviso', 'Ese sitio ya está en la lista.'); return; }
     const res = await insertarTienda(nombre);
     if (res === 'error') return;
     setLugarCompra(nombre);
@@ -156,10 +227,25 @@ function ContenidoApp() {
     setMostrandoAnadirTienda(false);
   };
 
-  const handleEliminarTienda = async (id, nombre) => {
-    const res = await eliminarTienda(id);
-    if (res === 'error') return;
-    if (lugarCompra === nombre) setLugarCompra(tiendas.find(t => t.id !== id)?.nombre || '');
+  const handleEliminarTienda = (id, nombre) => {
+    Alert.alert('Eliminar sitio', `¿Quitar "${nombre}" de la lista de sitios?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: async () => {
+        const res = await eliminarTienda(id);
+        if (res === 'error') return;
+        if (lugarCompra === nombre) setLugarCompra(tiendas.find(t => t.id !== id)?.nombre || '');
+      }},
+    ]);
+  };
+
+  const handleEliminarProducto = (p) => {
+    Alert.alert('Eliminar artículo', `¿Eliminar "${p.nombre}"? Se perderá su stock.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: async () => {
+        const res = await eliminarProducto(p.id);
+        if (res !== 'error') mostrarToast(`"${p.nombre}" eliminado.`, 'info');
+      }},
+    ]);
   };
 
   const handleComprado = async (id, nombreItem) => {
@@ -167,11 +253,15 @@ function ContenidoApp() {
     const m = nombreItem.match(regex);
     let nombreReal = nombreItem, cantidad = 1;
     if (m) { nombreReal = m[1].trim(); cantidad = parseInt(m[2], 10); }
-    const prod = productos.find(p => p.nombre.toLowerCase().trim() === nombreReal.toLowerCase());
+    const prod = productos.find(p => normalizar(p.nombre) === normalizar(nombreReal));
     const res = await marcarComprado(id, prod?.id || null, prod ? cantidad : 0);
-    if (prod && res !== 'error') {
-      if (res === 'encolado') Alert.alert('Sin conexion', `Se sumara +${cantidad} a "${prod.nombre}" cuando vuelva la cobertura.`);
-      else Alert.alert('Comprado', `+${cantidad} a "${prod.nombre}".`);
+    if (res === 'error') return;
+    vibrar('exito');
+    if (prod) {
+      if (res === 'encolado') mostrarToast(`Sin conexión: se sumará +${cantidad} a "${prod.nombre}" cuando vuelva la cobertura.`, 'aviso');
+      else mostrarToast(`Comprado: +${cantidad} a "${prod.nombre}".`);
+    } else {
+      mostrarToast(`Comprado: ${nombreReal}${res === 'encolado' ? ' (sin conexión)' : ''}.`, res === 'encolado' ? 'aviso' : 'exito');
     }
   };
 
@@ -181,14 +271,14 @@ function ContenidoApp() {
     let min = null;
     if (nuevoProdTieneMin) {
       min = parseInt(nuevoProdMinimo, 10);
-      if (isNaN(min) || min < 0) { Alert.alert('Falta campo', 'El minimo debe ser un numero.'); return; }
+      if (isNaN(min) || min < 0) { Alert.alert('Falta campo', 'El mínimo debe ser un número.'); return; }
     }
     const yaExiste = productos.some(p => p.nombre.toLowerCase().trim() === nuevoProdNombre.trim().toLowerCase());
     if (yaExiste) { Alert.alert('Aviso', 'Ese producto ya existe.'); return; }
     const res = await insertarProducto(nuevoProdNombre.trim(), nuevoProdCategoria, min);
     if (res === 'error') return;
-    if (res === 'encolado') Alert.alert('Registrado sin conexion', `"${nuevoProdNombre.trim()}" se subira cuando vuelva la cobertura.`);
-    else Alert.alert('Registrado', `"${nuevoProdNombre.trim()}" anadido.`);
+    if (res === 'encolado') mostrarToast(`"${nuevoProdNombre.trim()}" registrado sin conexión. Se subirá al volver la cobertura.`, 'aviso');
+    else mostrarToast(`"${nuevoProdNombre.trim()}" añadido.`);
     setNuevoProdNombre(''); setNuevoProdMinimo('2'); setNuevoProdTieneMin(true);
   };
 
@@ -205,7 +295,7 @@ function ContenidoApp() {
     let min = null;
     if (modalTieneMin) {
       min = parseInt(modalMinimo, 10);
-      if (isNaN(min) || min < 0) { Alert.alert('Falta campo', 'El minimo debe ser un numero.'); return; }
+      if (isNaN(min) || min < 0) { Alert.alert('Falta campo', 'El mínimo debe ser un número.'); return; }
     }
     const res = await editarProducto(modalProd.id, {
       nombre: modalNombre.trim(),
@@ -213,6 +303,7 @@ function ContenidoApp() {
       stock_minimo: min,
     });
     if (res === 'error') return;
+    mostrarToast('Cambios guardados.');
     setModalProd(null);
   };
 
@@ -227,9 +318,10 @@ function ContenidoApp() {
     return list;
   };
 
-  const productosFiltrados = categoriaSeleccionada === 'Todos'
-    ? productos
-    : productos.filter(p => p.categoria === categoriaSeleccionada);
+  const productosFiltrados = productos.filter(p =>
+    (categoriaSeleccionada === 'Todos' || p.categoria === categoriaSeleccionada) &&
+    (!busqueda.trim() || normalizar(p.nombre).includes(normalizar(busqueda)))
+  );
 
   const productosEnAlerta = productos.filter(
     p => p.stock_minimo !== null && p.stock_actual < p.stock_minimo
@@ -254,7 +346,15 @@ function ContenidoApp() {
       <View style={[s.header, { paddingTop: insets.top + 14 }]}>
         <View>
           <Text style={s.headerTitle}>La Bodeguilla</Text>
-          <Text style={s.headerSub}>PENA EL CHUNGAZO</Text>
+          <Text style={s.headerSub}>PEÑA EL CHUNGAZO</Text>
+          {proximoEvento && (
+            <TouchableOpacity onPress={() => setEventosVisible(true)} style={s.eventoChip}>
+              <CalendarDays size={11} color={tipoInfo(proximoEvento.tipo).color} />
+              <Text style={s.eventoChipTxt} numberOfLines={1}>
+                {proximoEvento.nombre} · {diasRestantes(proximoEvento.fecha) || proximoEvento.fecha}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={s.headerRight}>
           {!hayRed && (
@@ -300,7 +400,7 @@ function ContenidoApp() {
                 <View style={s.resumenBar}>
                   <View style={s.resumenItem}>
                     <Text style={s.resumenNum}>{productos.length}</Text>
-                    <Text style={s.resumenLbl}>ARTICULOS</Text>
+                    <Text style={s.resumenLbl}>ARTÍCULOS</Text>
                   </View>
                   <View style={s.resumenDivider} />
                   <View style={s.resumenItem}>
@@ -317,7 +417,23 @@ function ContenidoApp() {
                     <Text style={s.resumenLbl}>BIEN</Text>
                   </View>
                 </View>
+                {productosEnAlerta > 0 && (
+                  <TouchableOpacity style={s.btnFaltantes} onPress={handleApuntarFaltantes}>
+                    <ListPlus size={16} color={C.danger} />
+                    <Text style={s.btnFaltantesTxt}>APUNTAR LO QUE FALTA EN LA COMPRA</Text>
+                  </TouchableOpacity>
+                )}
                 <View style={s.filterBar}>
+                  <View style={s.buscador}>
+                    <Search size={15} color={C.textMuted} />
+                    <TextInput
+                      style={s.buscadorInput} placeholder="Buscar artículo..."
+                      placeholderTextColor={C.textMuted} value={busqueda} onChangeText={setBusqueda}
+                    />
+                    {busqueda !== '' && (
+                      <TouchableOpacity onPress={() => setBusqueda('')}><X size={15} color={C.textMuted} /></TouchableOpacity>
+                    )}
+                  </View>
                   <FlatList
                     data={CATEGORIAS} horizontal showsHorizontalScrollIndicator={false}
                     keyExtractor={i => i}
@@ -337,7 +453,9 @@ function ContenidoApp() {
                   data={productosFiltrados}
                   keyExtractor={item => item.id.toString()}
                   contentContainerStyle={s.listPad}
-                  ListEmptyComponent={<Text style={s.emptyTxt}>Nada en esta categoria.</Text>}
+                  keyboardShouldPersistTaps="handled"
+                  refreshControl={<RefreshControl refreshing={refrescando} onRefresh={onRefrescar} tintColor={C.accent} colors={[C.accent]} />}
+                  ListEmptyComponent={<Text style={s.emptyTxt}>{busqueda ? 'Nada coincide con la búsqueda.' : 'Nada en esta categoría.'}</Text>}
                   renderItem={({ item }) => {
                     const bajo = item.stock_minimo !== null && item.stock_actual < item.stock_minimo;
                     return (
@@ -366,8 +484,8 @@ function ContenidoApp() {
                 <View style={[s.recuentoBanner, !hayRed && s.recuentoBannerOffline]}>
                   <Text style={[s.recuentoBannerTxt, !hayRed && { color: C.warning }]}>
                     {hayRed
-                      ? 'Escribe cuanto queda de cada cosa. Puedes usar el campo o los botones.'
-                      : 'Sin conexion — el recuento se guardara en el movil y se subira solo despues.'}
+                      ? 'Escribe cuánto queda de cada cosa. Puedes usar el campo o los botones.'
+                      : 'Sin conexión — el recuento se guardará en el móvil y se subirá solo después.'}
                   </Text>
                 </View>
                 <FlatList
@@ -412,9 +530,11 @@ function ContenidoApp() {
                     );
                   }}
                 />
-                <TouchableOpacity style={s.btnPrimary} onPress={handleGuardarRecuento}>
+                <TouchableOpacity style={[s.btnPrimary, s.btnGuardarRecuento]} onPress={() => handleGuardarRecuento()}>
                   <Save size={17} color={C.bg} style={{ marginRight: 8 }} />
-                  <Text style={s.btnPrimaryTxt}>GUARDAR RECUENTO</Text>
+                  <Text style={s.btnPrimaryTxt}>
+                    {cambiosRecuento > 0 ? `GUARDAR RECUENTO (${cambiosRecuento} cambio${cambiosRecuento > 1 ? 's' : ''})` : 'GUARDAR RECUENTO'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -428,6 +548,7 @@ function ContenidoApp() {
                 keyboardDismissMode="on-drag"
                 enableOnAndroid={true}
                 extraScrollHeight={20}
+                refreshControl={<RefreshControl refreshing={refrescando} onRefresh={onRefrescar} tintColor={C.accent} colors={[C.accent]} />}
               >
                 <TouchableOpacity
                   onPress={() => setCuentasVisible(true)}
@@ -435,18 +556,27 @@ function ContenidoApp() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <Receipt size={18} color={C.accent} />
-                    <Text style={s.btnCuentasTxt}>CUENTAS DE LA PENA</Text>
+                    <Text style={s.btnCuentasTxt}>CUENTAS DE LA PEÑA</Text>
                   </View>
                   <Plus size={18} color={C.accent} />
                 </TouchableOpacity>
 
                 <View style={s.formCard}>
-                  <Text style={s.sectionLabel}>QUE HAY QUE COMPRAR</Text>
+                  <Text style={s.sectionLabel}>QUÉ HAY QUE COMPRAR</Text>
                   <TextInput
-                    style={s.input} placeholder="Ej: Coca-Cola 2L, Ron Dyc..."
+                    style={[s.input, sugerenciasCompra.length > 0 && { marginBottom: 8 }]} placeholder="Ej: Coca-Cola 2L, Ron Dyc..."
                     placeholderTextColor={C.textMuted} value={nombreCompra}
                     onChangeText={setNombreCompra}
                   />
+                  {sugerenciasCompra.length > 0 && (
+                    <View style={s.chipRow}>
+                      {sugerenciasCompra.map(p => (
+                        <TouchableOpacity key={p.id} style={s.chipSugerencia} onPress={() => elegirSugerencia(p)}>
+                          <Text style={s.chipSugerenciaTxt} numberOfLines={1}>{p.nombre}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                   <Text style={s.fieldLabel}>Cantidad</Text>
                   <View style={s.qtyRow}>
                     <TouchableOpacity style={s.btnQty} onPress={() => setCantidadCompra(m => Math.max(1, m - 1))}>
@@ -458,7 +588,7 @@ function ContenidoApp() {
                     </TouchableOpacity>
                   </View>
                   <View style={s.fieldRow}>
-                    <Text style={s.fieldLabel}>Donde se compra</Text>
+                    <Text style={s.fieldLabel}>Dónde se compra</Text>
                     <TouchableOpacity onPress={() => setMostrandoAnadirTienda(!mostrandoAnadirTienda)} style={s.configLink}>
                       <SlidersHorizontal size={13} color={C.accent} />
                       <Text style={s.configLinkTxt}>Gestionar sitios</Text>
@@ -507,7 +637,7 @@ function ContenidoApp() {
                 </View>
 
                 {Object.keys(generarListaAgrupada()).length === 0 ? (
-                  <Text style={s.emptyTxt}>La lista esta vacia. Buen sintoma.</Text>
+                  <Text style={s.emptyTxt}>La lista está vacía. Buen síntoma.</Text>
                 ) : (
                   Object.entries(generarListaAgrupada()).map(([tienda, items]) => (
                     <View key={tienda} style={s.bloqueTienda}>
@@ -549,14 +679,14 @@ function ContenidoApp() {
                 extraScrollHeight={20}
               >
                 <View style={s.formCard}>
-                  <Text style={s.sectionLabel}>NUEVO ARTICULO</Text>
+                  <Text style={s.sectionLabel}>NUEVO ARTÍCULO</Text>
                   <Text style={s.fieldLabel}>Nombre</Text>
                   <TextInput
                     style={s.input} placeholder="Ej: Fanta Naranja 2L"
                     placeholderTextColor={C.textMuted} value={nuevoProdNombre}
                     onChangeText={setNuevoProdNombre}
                   />
-                  <Text style={s.fieldLabel}>Categoria</Text>
+                  <Text style={s.fieldLabel}>Categoría</Text>
                   <View style={s.chipRow}>
                     {CATEGORIAS_FORM.map(cat => (
                       <TouchableOpacity
@@ -575,12 +705,12 @@ function ContenidoApp() {
                       {nuevoProdTieneMin && <View style={s.toggleDot} />}
                     </View>
                     <Text style={s.toggleLbl}>
-                      {nuevoProdTieneMin ? 'Tiene stock minimo' : 'Sin stock minimo (producto puntual)'}
+                      {nuevoProdTieneMin ? 'Tiene stock mínimo' : 'Sin stock mínimo (producto puntual)'}
                     </Text>
                   </TouchableOpacity>
                   {nuevoProdTieneMin && (
                     <>
-                      <Text style={s.fieldLabel}>Stock minimo</Text>
+                      <Text style={s.fieldLabel}>Stock mínimo</Text>
                       <TextInput
                         style={s.input} placeholder="Ej: 2" placeholderTextColor={C.textMuted}
                         keyboardType="numeric" value={nuevoProdMinimo} onChangeText={setNuevoProdMinimo}
@@ -594,20 +724,20 @@ function ContenidoApp() {
                 </View>
 
                 <View style={s.bloqueTienda}>
-                  <Text style={s.bloqueTiendaTitulo}>ARTICULOS EXISTENTES</Text>
+                  <Text style={s.bloqueTiendaTitulo}>ARTÍCULOS EXISTENTES</Text>
                   {productos.map(p => (
                     <View key={p.id} style={s.gestionItem}>
                       <View style={{ flex: 1 }}>
                         <Text style={s.itemCompraTxt}>{p.nombre}</Text>
                         <Text style={s.cardSub}>
                           {p.categoria}
-                          {p.stock_minimo !== null ? `  \u00B7  Min: ${p.stock_minimo}` : '  \u00B7  Sin minimo'}
+                          {p.stock_minimo !== null ? `  \u00B7  Mín: ${p.stock_minimo}` : '  \u00B7  Sin mínimo'}
                         </Text>
                       </View>
                       <TouchableOpacity style={s.btnEditar} onPress={() => abrirModalEdicion(p)}>
                         <Pencil color={C.accent} size={15} />
                       </TouchableOpacity>
-                      <TouchableOpacity style={{ paddingLeft: 10 }} onPress={() => eliminarProducto(p.id)}>
+                      <TouchableOpacity style={{ paddingLeft: 10 }} onPress={() => handleEliminarProducto(p)}>
                         <Trash2 color={C.danger} size={16} />
                       </TouchableOpacity>
                     </View>
@@ -630,12 +760,12 @@ function ContenidoApp() {
           { id: 'visual',    label: 'Alacena',  Icon: Eye },
           { id: 'recuento',  label: 'Recuento', Icon: ClipboardList },
           { id: 'compra',    label: 'Compra',   Icon: ShoppingCart },
-          { id: 'gestion',   label: 'Gestion',  Icon: Settings },
+          { id: 'gestion',   label: 'Gestión',  Icon: Settings },
           { id: 'blackjack', label: 'Casino',   Icon: Gamepad },
         ].map(({ id, label, Icon }) => {
           const active = pestanaActual === id;
           return (
-            <TouchableOpacity key={id} style={s.tabBtn} onPress={() => setPestanaActual(id)}>
+            <TouchableOpacity key={id} style={s.tabBtn} onPress={() => cambiarPestana(id)}>
               <View style={s.tabIconWrap}>
                 <Icon size={20} color={active ? C.accent : C.textMuted} />
               </View>
@@ -663,7 +793,7 @@ function ContenidoApp() {
           >
             <View style={s.modalCard}>
               <View style={s.modalHeader}>
-                <Text style={s.modalTitulo}>EDITAR ARTICULO</Text>
+                <Text style={s.modalTitulo}>EDITAR ARTÍCULO</Text>
                 <TouchableOpacity onPress={() => setModalProd(null)}>
                   <X color={C.textMuted} size={20} />
                 </TouchableOpacity>
@@ -675,7 +805,7 @@ function ContenidoApp() {
                 onChangeText={setModalNombre} placeholderTextColor={C.textMuted}
               />
 
-              <Text style={s.fieldLabel}>Categoria</Text>
+              <Text style={s.fieldLabel}>Categoría</Text>
               <View style={s.chipRow}>
                 {CATEGORIAS_FORM.map(cat => (
                   <TouchableOpacity
@@ -695,13 +825,13 @@ function ContenidoApp() {
                   {modalTieneMin && <View style={s.toggleDot} />}
                 </View>
                 <Text style={s.toggleLbl}>
-                  {modalTieneMin ? 'Tiene stock minimo' : 'Sin stock minimo (producto puntual)'}
+                  {modalTieneMin ? 'Tiene stock mínimo' : 'Sin stock mínimo (producto puntual)'}
                 </Text>
               </TouchableOpacity>
 
               {modalTieneMin && (
                 <>
-                  <Text style={s.fieldLabel}>Stock minimo</Text>
+                  <Text style={s.fieldLabel}>Stock mínimo</Text>
                   <TextInput
                     style={s.input} keyboardType="numeric"
                     value={modalMinimo} onChangeText={setModalMinimo}
@@ -722,6 +852,8 @@ function ContenidoApp() {
       {/* CUENTAS DE LA PENA */}
       <CuentasPena visible={cuentasVisible} onClose={() => setCuentasVisible(false)} />
       <Eventos visible={eventosVisible} onClose={() => setEventosVisible(false)} />
+
+      <Toast bottom={72 + insets.bottom} />
 
     </View>
   );
@@ -946,4 +1078,30 @@ const s = StyleSheet.create({
     alignItems: 'center', marginBottom: 18,
   },
   modalTitulo: { fontSize: 11, fontWeight: '800', color: C.accent, letterSpacing: 2 },
+
+  eventoChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+    backgroundColor: C.surfaceAlt, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12, marginTop: 8, maxWidth: 230,
+  },
+  eventoChipTxt: { color: C.textSec, fontSize: 11, fontWeight: '700', flexShrink: 1 },
+
+  btnFaltantes: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: C.dangerDim, paddingVertical: 11,
+    borderBottomWidth: 1, borderColor: C.border,
+  },
+  btnFaltantesTxt: { color: C.danger, fontWeight: '800', fontSize: 12, letterSpacing: 0.5 },
+
+  buscador: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: C.surfaceAlt, borderRadius: 8, borderWidth: 1, borderColor: C.border,
+    paddingHorizontal: 10, marginBottom: 10,
+  },
+  buscadorInput: { flex: 1, color: C.textPrim, fontSize: 14, paddingVertical: 8 },
+
+  chipSugerencia:    { backgroundColor: C.accentDim, borderWidth: 1, borderColor: C.accent + '55', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6, maxWidth: '100%' },
+  chipSugerenciaTxt: { color: C.accent, fontWeight: '700', fontSize: 12 },
+
+  btnGuardarRecuento: { marginHorizontal: 14, marginBottom: 10 },
 });

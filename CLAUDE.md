@@ -18,6 +18,8 @@ App móvil (Expo / React Native, JavaScript sin TypeScript) para la peña "El Ch
 - `CuentasPena.js` — cuentas compartidas (sesiones de compra, gastos por integrante) con su propia cola offline y realtime de Supabase.
 - `Eventos.js` — calendario de eventos (fechas en formato DD-MM-AAAA en el formulario, ISO en BD).
 - `errores.js` — `avisarError(titulo, e)` (Alert + consola), `esErrorDeRed(e)`, `textoError(e)`. Usarlo para cualquier error que el usuario deba ver.
+- `tema.js` — paleta `C` compartida por toda la app (también el casino) y `normalizar(texto)` para comparar nombres sin mayúsculas ni tildes.
+- `feedback.js` + `Toast.js` — `mostrarToast(texto, 'exito'|'aviso'|'info')` para avisos de éxito no bloqueantes (los errores siguen siendo Alert) y `vibrar('exito'|'error'|'aviso'|'suave')` con expo-haptics. `<Toast />` se monta una vez en `App.js`.
 - `supabase.js` — cliente de Supabase. `supabaseService.js` — jugadores y ranking del casino.
 - `Casino.js` — perfil del jugador, monedas, rachas, bancarrotas, lobby, registro y ranking. Llama a los hooks de cada juego (`useBlackjack`, `useRuleta`, …) para que su estado viva en el componente padre.
 - `casino/` — un archivo por juego (`Blackjack`, `Ruleta`, `Tragaperras`, `Dados`, `Rasca`, `War`), cada uno con su hook `useX(ctx)` y su componente de pantalla; `componentes.js` (piezas compartidas: `SelectorApuesta`, `CabeceraJuego`, `BannerResultado`, cartas, dado…), `estilos.js` y `datos.js` (textos de ayuda, símbolos, barajas).

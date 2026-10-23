@@ -1,18 +1,20 @@
 // casino/estilos.js — estilos compartidos por todas las pantallas del casino
 import { StyleSheet } from 'react-native';
+import { C } from '../tema';
 
 export const styles = StyleSheet.create({
   // === CONTENEDOR PRINCIPAL ===
-  tableroCasinoPremium: { backgroundColor: '#0F1923', borderRadius: 0, borderWidth: 2, borderColor: '#2A1A40', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6, width: '100%', overflow: 'hidden' },
+  tableroCasinoPremium: { backgroundColor: C.bg, borderRadius: 0, borderWidth: 2, borderColor: C.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 6, width: '100%', overflow: 'hidden' },
 
   // === HEADER ===
-  cabeceraCasinoMesa: { flexDirection: 'row', backgroundColor: '#1A0A2E', width: '100%', paddingHorizontal: 16, paddingVertical: 13, alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(254,240,138,0.15)' },
-  txtMesaPremiumTitulo: { color: '#fff', fontSize: 13, fontWeight: '900', letterSpacing: 2, textTransform: 'uppercase' },
+  cabeceraCasinoMesa: { flexDirection: 'row', backgroundColor: C.surface, width: '100%', paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(254,240,138,0.15)' },
+  btnRankingHud: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, backgroundColor: 'rgba(254,240,138,0.08)', borderWidth: 1, borderColor: 'rgba(254,240,138,0.2)' },
+  txtRankingHud: { color: '#FEF08A', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
   hudMonedasPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(254,240,138,0.12)', paddingVertical: 5, paddingHorizontal: 12, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(254,240,138,0.3)' },
 
   // === LOBBY ===
-  lobbyCasinoListaVertical: { width: '100%', padding: 14, backgroundColor: '#0F1923', gap: 10 },
-  tarjetaJuegoRectangularGris: { width: '100%', backgroundColor: '#1C1130', borderRadius: 14, padding: 14, justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(91,50,129,0.4)', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 5, elevation: 3 },
+  lobbyCasinoListaVertical: { width: '100%', padding: 14, backgroundColor: C.bg, gap: 10 },
+  tarjetaJuegoRectangularGris: { width: '100%', backgroundColor: C.surface, borderRadius: 14, padding: 14, justifyContent: 'center', borderWidth: 1, borderColor: C.border, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 5, elevation: 3 },
   iconoTarjetaCirculo: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(254,240,138,0.1)', borderWidth: 1, borderColor: 'rgba(254,240,138,0.25)', alignItems: 'center', justifyContent: 'center' },
   txtTituloTarjetaJuego: { color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 0.5 },
   txtSubtituloTarjetaJuego: { color: '#6B7280', fontSize: 11, fontWeight: '500', marginTop: 2 },
@@ -21,8 +23,8 @@ export const styles = StyleSheet.create({
   txtMiniRachaText: { color: '#9CA3AF', fontSize: 11, fontWeight: '700' },
 
   // === PANTALLA PREVIA BLACKJACK ===
-  lobbyCasinoCaja: { padding: 16, alignItems: 'center', justifyContent: 'center', width: '100%', backgroundColor: '#0F1923', gap: 14 },
-  tarjetaBlancaLobbyBase: { width: '100%', borderWidth: 1, borderColor: 'rgba(91,50,129,0.5)', borderRadius: 14, padding: 18, backgroundColor: '#1C1130', alignItems: 'center' },
+  lobbyCasinoCaja: { padding: 16, alignItems: 'center', justifyContent: 'center', width: '100%', backgroundColor: C.bg, gap: 14 },
+  tarjetaBlancaLobbyBase: { width: '100%', borderWidth: 1, borderColor: C.border, borderRadius: 14, padding: 18, backgroundColor: C.surface, alignItems: 'center' },
 
   btnIniciarJuegoPremium: { backgroundColor: '#7C3AED', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 12, width: '100%', alignItems: 'center', borderBottomWidth: 3, borderColor: '#5B21B6' },
   txtBtnJuegoText: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 1 },
@@ -34,7 +36,7 @@ export const styles = StyleSheet.create({
   txtRachaStatValor: { fontSize: 15, fontWeight: '900', color: '#FEF08A' },
 
   // === MESA BLACKJACK ===
-  contenedorMesaFondoVerdeReal: { width: '100%', padding: 14, backgroundColor: '#0F1923' },
+  contenedorMesaFondoVerdeReal: { width: '100%', padding: 14, backgroundColor: C.bg },
   zonaJugadorFila: { width: '100%', paddingVertical: 8, alignItems: 'center' },
   txtMarcadorEtiqueta: { color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4, textTransform: 'uppercase' },
   filaCartasContenedor: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', minHeight: 85, alignItems: 'center', width: '100%', marginTop: 4 },
@@ -81,7 +83,7 @@ export const styles = StyleSheet.create({
   casillaTapeteNumero: { justifyContent: 'center', alignItems: 'center', borderRadius: 3 },
 
   // === TRAGAPERRAS ===
-  chasisTragaperrasMueble: { width: '100%', backgroundColor: '#1C1130', borderRadius: 16, padding: 14, borderWidth: 2, borderColor: '#2E1065', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 8 },
+  chasisTragaperrasMueble: { width: '100%', backgroundColor: C.surface, borderRadius: 16, padding: 14, borderWidth: 2, borderColor: '#2E1065', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.5, shadowRadius: 8, elevation: 8 },
   marquesinaLuminosa: { width: '100%', backgroundColor: '#4C1D95', paddingVertical: 10, alignItems: 'center', borderRadius: 10, borderWidth: 1.5, borderColor: '#FEF08A', marginBottom: 14 },
   txtMarquesinaTitulo: { color: '#FEF08A', fontWeight: '900', fontSize: 15, letterSpacing: 3, textShadowColor: 'rgba(254, 240, 138, 0.6)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8 },
   pantallaRodillosNeon: { width: '100%', backgroundColor: '#0D0D0D', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#EAB308', shadowColor: '#EAB308', shadowOpacity: 0.4, shadowRadius: 6, elevation: 5 },
@@ -95,7 +97,7 @@ export const styles = StyleSheet.create({
 
   // === RASCA Y GANA ===
   casillaScratch: { width: 96, height: 96, backgroundColor: '#2E1065', borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(167,139,250,0.4)', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
-  casillaScratchRevelada: { backgroundColor: '#1C1130', borderColor: 'rgba(52,211,153,0.4)' },
+  casillaScratchRevelada: { backgroundColor: C.surface, borderColor: 'rgba(52,211,153,0.4)' },
 
   // === BOTÓN AYUDA ? ===
   btnAyuda: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(254,240,138,0.12)', borderWidth: 1, borderColor: 'rgba(254,240,138,0.35)', justifyContent: 'center', alignItems: 'center' },
@@ -111,7 +113,7 @@ export const styles = StyleSheet.create({
 
 export const estilosModal = StyleSheet.create({
   fondo: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-  caja: { backgroundColor: '#1C1130', borderRadius: 18, padding: 22, width: '100%', borderWidth: 1.5, borderColor: 'rgba(254,240,138,0.3)' },
+  caja: { backgroundColor: C.surface, borderRadius: 18, padding: 22, width: '100%', borderWidth: 1.5, borderColor: 'rgba(254,240,138,0.3)' },
   titulo: { color: '#FEF08A', fontWeight: '900', fontSize: 17, letterSpacing: 0.5, marginBottom: 14, textAlign: 'center' },
   separador: { height: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 12 },
   filaRegla: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 9 },

@@ -272,6 +272,12 @@ export function useOfflineSync() {
     return 'encolado';
   }, [cargarDatos, guardarCola, procesarCola]);
 
+  // Deslizar para recargar: sube lo pendiente (si hay) y trae datos frescos
+  const recargar = useCallback(async () => {
+    if (colaRef.current.length > 0) await procesarCola();
+    else await cargarDatos();
+  }, [procesarCola, cargarDatos]);
+
   // ── Recuento ──────────────────────────────────────────────────────────────
   const guardarRecuento = useCallback(async (stockTemporal) => {
     // Solo se suben los productos que han cambiado
@@ -315,6 +321,7 @@ export function useOfflineSync() {
     productos: datos.productos, extras: datos.extras, tiendas: datos.tiendas,
     cargando, hayRed, pendientes,
     cargarDatos,
+    recargar,
     guardarRecuento,
     anadirExtra,
     marcarComprado,

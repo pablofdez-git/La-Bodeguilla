@@ -24,7 +24,7 @@ const TIPOS = [
   { id: 'otro',     label: 'Otro',     color: '#9B6DCC' },
 ];
 
-const tipoInfo = id => TIPOS.find(t => t.id === id) || TIPOS[4];
+export const tipoInfo = id => TIPOS.find(t => t.id === id) || TIPOS[4];
 
 const formatFecha = iso => {
   if (!iso) return '';
@@ -41,7 +41,7 @@ const esPasado = iso => {
   return new Date(parseInt(y), parseInt(m) - 1, parseInt(d)) < hoy;
 };
 
-const diasRestantes = iso => {
+export const diasRestantes = iso => {
   if (!iso) return null;
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
   const [y, m, d] = iso.split('-');
@@ -59,6 +59,15 @@ async function getEventos() {
     .from('eventos').select('*').order('fecha', { ascending: true });
   if (error) throw error;
   return data || [];
+}
+// Próximo evento (hoy o después), o null si no hay ninguno
+export async function obtenerProximoEvento() {
+  const hoy = new Date();
+  const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+  const { data, error } = await supabase
+    .from('eventos').select('*').gte('fecha', iso).order('fecha', { ascending: true }).limit(1);
+  if (error) throw error;
+  return data?.[0] || null;
 }
 async function insertEvento(nombre, fecha, hora, tipo, notas) {
   const { error } = await supabase.from('eventos')

@@ -1,5 +1,6 @@
 // casino/componentes.js — piezas visuales reutilizadas por varios juegos
 import React from 'react';
+import { C } from '../tema';
 import { Text, View, TouchableOpacity, Image, Modal } from 'react-native';
 import { Minus, Plus } from 'lucide-react-native';
 import { AYUDA_TEXTOS, PUNTOS_DADO } from './datos';
@@ -69,7 +70,7 @@ export function DadoVisual({ valor, size = 80, animando = false }) {
             width: size * 0.16,
             height: size * 0.16,
             borderRadius: size * 0.08,
-            backgroundColor: '#1C1130',
+            backgroundColor: C.surface,
             left: (p[0] / 100) * size - (size * 0.08),
             top: (p[1] / 100) * size - (size * 0.08),
           }} />

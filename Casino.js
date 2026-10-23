@@ -3,6 +3,8 @@ import { Text, View, TouchableOpacity, ScrollView, Alert, TextInput, ActivityInd
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { registrarOObtenerJugador, sincronizarJugador, obtenerRanking } from './supabaseService';
 import { avisarError, esErrorDeRed } from './errores';
+import { vibrar } from './feedback';
+import { C } from './tema';
 import { Dices, Gamepad, Layers, Flame, Trophy, AlertTriangle, RefreshCw } from 'lucide-react-native';
 import { styles } from './casino/estilos';
 import { ModalAyuda } from './casino/componentes';
@@ -12,6 +14,14 @@ import { useTragaperras, MaquinaTragaperras } from './casino/Tragaperras';
 import { useDados, MesaDados } from './casino/Dados';
 import { useRasca, MesaRasca } from './casino/Rasca';
 import { useWar, MesaWar } from './casino/War';
+
+// Vibra cuando un juego termina en victoria o derrota
+function useVibrarResultado(tipo) {
+  useEffect(() => {
+    if (tipo === 'ganado') vibrar('exito');
+    else if (tipo === 'perdido') vibrar('error');
+  }, [tipo]);
+}
 
 // Tarjeta del lobby para entrar a un juego
 function TarjetaJuego({ titulo, subtitulo, Icono, colorIcono, estiloCirculo, onPress, children }) {
@@ -153,6 +163,7 @@ export default function Casino() {
       actualizarMonedas(saldoAuxilio);
       setBancarrotas(nuevasBancarrotas);
       guardarDatoCasinoLocal('@casino_bancarrotas', nuevasBancarrotas);
+      vibrar('aviso');
       Alert.alert('💸 Bancarrota', `Has perdido todo. Se te asignan 50 monedas para reengancharte.\nBancarrotas totales: ${nuevasBancarrotas}`);
       return saldoAuxilio;
     }
@@ -180,11 +191,18 @@ export default function Casino() {
   const ra = useRasca(ctx);
   const wa = useWar(ctx);
 
+  useVibrarResultado(bj.resultadoTipo);
+  useVibrarResultado(tp.resultadoTipoSlots);
+  useVibrarResultado(da.dadosResultadoTipo);
+  useVibrarResultado(ra.rascaResultadoTipo);
+  useVibrarResultado(wa.warResultadoTipo);
+  useVibrarResultado(!ru.mostrarOverlayRuleta ? '' : ru.textoOverlayRuleta.startsWith('¡HAS GANADO') ? 'ganado' : 'perdido');
+
   const salirAlMenu = () => setJuegoSeleccionado(null);
   const props = (juego) => ({ monedas, onAyuda: () => setModalAyuda(juego), onSalir: salirAlMenu });
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#0F1923' }}>
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
 
       {/* ── PANTALLA CARGANDO ──────────────────────────────────────────────── */}
       {pantallaActiva === 'cargando' && (
@@ -197,7 +215,7 @@ export default function Casino() {
       {/* ── PANTALLA REGISTRO (primer arranque) ───────────────────────────── */}
       {pantallaActiva === 'registro' && (
         <KeyboardAvoidingView
-          style={{ flex: 1, backgroundColor: '#0F1923' }}
+          style={{ flex: 1, backgroundColor: C.bg }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 80}
         >
@@ -212,7 +230,7 @@ export default function Casino() {
             <Text style={{ color: '#6B7280', fontSize: 13, fontWeight: '600', letterSpacing: 1 }}>CASINO DEL PUEBLO</Text>
           </View>
 
-          <View style={{ backgroundColor: '#1C1130', borderRadius: 16, padding: 22, borderWidth: 1, borderColor: 'rgba(124,58,237,0.4)', gap: 16 }}>
+          <View style={{ backgroundColor: C.surface, borderRadius: 16, padding: 22, borderWidth: 1, borderColor: 'rgba(124,58,237,0.4)', gap: 16 }}>
             <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900', textAlign: 'center' }}>¿CÓMO TE LLAMAS?</Text>
             <Text style={{ color: '#9CA3AF', fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
               Tu nombre se guarda en este dispositivo y en el ranking compartido. No podrás cambiarlo después.
@@ -254,7 +272,7 @@ export default function Casino() {
 
       {/* ── PANTALLA RANKING ───────────────────────────────────────────────── */}
       {pantallaActiva === 'ranking' && (
-        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 48 }} style={{ backgroundColor: '#0F1923' }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, padding: 20, paddingTop: 48 }} style={{ backgroundColor: C.bg }}>
           {/* Cabecera */}
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 28, gap: 10 }}>
             <TouchableOpacity onPress={() => setPantallaActiva('juego')} style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.06)', justifyContent: 'center', alignItems: 'center' }}>
@@ -283,9 +301,9 @@ export default function Casino() {
                 const esTu = j.nombre === nombreJugador;
                 return (
                   <View key={j.nombre} style={{
-                    backgroundColor: esTu ? 'rgba(124,58,237,0.18)' : '#1C1130',
+                    backgroundColor: esTu ? 'rgba(124,58,237,0.18)' : C.surface,
                     borderRadius: 12, padding: 14, borderWidth: 1,
-                    borderColor: esTu ? 'rgba(124,58,237,0.7)' : idx < 3 ? 'rgba(254,240,138,0.2)' : 'rgba(91,50,129,0.3)',
+                    borderColor: esTu ? 'rgba(124,58,237,0.7)' : idx < 3 ? 'rgba(254,240,138,0.2)' : C.border,
                     flexDirection: 'row', alignItems: 'center', gap: 12,
                   }}>
                     {/* Posición */}
@@ -331,26 +349,21 @@ export default function Casino() {
 
       {/* ── PANTALLA DE JUEGO ──────────────────────────────────────────────── */}
       {pantallaActiva === 'juego' && (
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} style={{ backgroundColor: '#0F1923' }}>
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} style={{ backgroundColor: C.bg }}>
           <View style={styles.tableroCasinoPremium}>
 
             <ModalAyuda juego={modalAyuda} onCerrar={() => setModalAyuda(null)} />
 
-            {/* HUD Superior */}
+            {/* Barra del jugador: ranking + nombre + saldo */}
             <View style={styles.cabeceraCasinoMesa}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-                <Dices size={18} color="#FEF08A" />
-                <Text style={styles.txtMesaPremiumTitulo}>LA BODEGUILLA</Text>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <TouchableOpacity onPress={() => { cargarRanking(); setPantallaActiva('ranking'); }} style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(254,240,138,0.08)', borderWidth: 1, borderColor: 'rgba(254,240,138,0.2)', justifyContent: 'center', alignItems: 'center' }}>
-                  <Trophy size={14} color="#FEF08A" />
-                </TouchableOpacity>
-                <View style={styles.hudMonedasPill}>
-                  <Text style={{ color: '#C4B5FD', fontWeight: '700', fontSize: 11, marginRight: 5 }}>{nombreJugador}</Text>
-                  <Text style={{ color: '#FEF08A', fontSize: 13 }}>🪙</Text>
-                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14, marginLeft: 4 }}>{monedas}</Text>
-                </View>
+              <TouchableOpacity onPress={() => { cargarRanking(); setPantallaActiva('ranking'); }} style={styles.btnRankingHud}>
+                <Trophy size={14} color="#FEF08A" />
+                <Text style={styles.txtRankingHud}>RANKING</Text>
+              </TouchableOpacity>
+              <View style={styles.hudMonedasPill}>
+                <Text style={{ color: '#C4B5FD', fontWeight: '700', fontSize: 11, marginRight: 5 }}>{nombreJugador}</Text>
+                <Text style={{ color: '#FEF08A', fontSize: 13 }}>🪙</Text>
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14, marginLeft: 4 }}>{monedas}</Text>
               </View>
             </View>
 
@@ -358,7 +371,7 @@ export default function Casino() {
             {juegoSeleccionado === null && (
               <View style={styles.lobbyCasinoListaVertical}>
                 <TarjetaJuego
-                  titulo="BLACK JACK" subtitulo="La mesa clásica · Apuesta libre"
+                  titulo="BLACK JACK" subtitulo="Doblar, split, seguro · Blackjack paga 3:2"
                   Icono={Layers} colorIcono="#FEF08A"
                   onPress={() => setJuegoSeleccionado('blackjack')}
                 >
@@ -397,14 +410,14 @@ export default function Casino() {
                 />
 
                 <TarjetaJuego
-                  titulo="RASCA Y GANA" subtitulo="6 casillas · Par x2 · Trifecta hasta x50"
+                  titulo="RASCA Y GANA" subtitulo="6 casillas · Par x2 · Trifecta hasta x25 · 5 al día"
                   Icono={AlertTriangle} colorIcono="#34D399"
                   estiloCirculo={{ backgroundColor: 'rgba(16,185,129,0.2)', borderColor: 'rgba(16,185,129,0.4)' }}
                   onPress={() => { ra.nueva(); setJuegoSeleccionado('rasca'); }}
                 />
 
                 <TarjetaJuego
-                  titulo="WAR — CARTA ALTA" subtitulo="Tú vs crupier · Empate → ¡a la guerra! · x2"
+                  titulo="WAR — CARTA ALTA" subtitulo="Tú vs crupier · Gana x3 · Empate → ¡a la guerra! (x6)"
                   Icono={Layers} colorIcono="#FBBF24"
                   estiloCirculo={{ backgroundColor: 'rgba(245,158,11,0.2)', borderColor: 'rgba(245,158,11,0.4)' }}
                   onPress={() => { wa.resetear(); setJuegoSeleccionado('war'); }}
