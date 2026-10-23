@@ -214,15 +214,25 @@ function RenderizarCarta({ nombre, palo, oculta }) {
 export default function Casino() {
   const [juegoSeleccionado, setJuegoSeleccionado] = useState(null);
 
-  // Estados del Blackjack originales
-  const [enPartida, setEnPartida] = useState(false);
-  const [repartiendo, setRepartiendo] = useState(false);
-  const [baraja, setBaraja] = useState([]);
-  const [manoJugador, setManoJugador] = useState([]);
-  const [manoCrupier, setManoCrupier] = useState([]);
-  const [resultadoTipo, setResultadoTipo] = useState('');
+  // ── BLACKJACK — Estado completo ───────────────────────────────────────────
+  const [enPartida,        setEnPartida]        = useState(false);
+  const [repartiendo,      setRepartiendo]      = useState(false);
+  const [baraja,           setBaraja]           = useState([]);
+  const [manoJugador,      setManoJugador]      = useState([]);
+  const [manoSplit,        setManoSplit]        = useState([]); // segunda mano tras split
+  const [jugandoSplit,     setJugandoSplit]     = useState(false); // false=mano1, true=mano2
+  const [manoCrupier,      setManoCrupier]      = useState([]);
+  const [resultadoTipo,    setResultadoTipo]    = useState('');
+  const [resultadoSplit,   setResultadoSplit]   = useState(''); // resultado mano2
   const [mensajeResultado, setMensajeResultado] = useState('');
-  const [verTapete, setVerTapete] = useState(false);
+  const [mensajeSplit,     setMensajeSplit]     = useState('');
+  const [verTapete,        setVerTapete]        = useState(false);
+  const [apuestaDoble,     setApuestaDoble]     = useState(0);   // extra por doble/split
+  const [haySeguro,        setHaySeguro]        = useState(false);
+  const [ofrecerSeguro,    setOfrecerSeguro]    = useState(false);
+  const [seguroPagado,     setSeguroPagado]     = useState(false);
+  const [puedeDoble,       setPuedeDoble]       = useState(false);
+  const [puedeSplit,       setPuedeSplit]       = useState(false);
 
   // Sistema de monedas general y rachas
   const [rachaActual, setRachaActual] = useState(0);
@@ -392,167 +402,376 @@ export default function Casino() {
     return saldoActual;
   };
 
-  // Lógica original del Blackjack
-  const inicializarBaraja = () => {
+  // ── BLACKJACK — Lógica completa ───────────────────────────────────────────
+
+  // Zapato de 4 barajas
+  const crearZapato = () => {
     const palos = ['♦', '♣', '♥', '♠'];
     const valores = [
       { nombre: 'A', valor: 11 }, { nombre: '2', valor: 2 }, { nombre: '3', valor: 3 },
-      { nombre: '4', valor: 4 }, { nombre: '5', valor: 5 }, { nombre: '6', valor: 6 },
-      { nombre: '7', valor: 7 }, { nombre: '8', valor: 8 }, { nombre: '9', valor: 9 },
+      { nombre: '4', valor: 4 },  { nombre: '5', valor: 5 }, { nombre: '6', valor: 6 },
+      { nombre: '7', valor: 7 },  { nombre: '8', valor: 8 }, { nombre: '9', valor: 9 },
       { nombre: '10', valor: 10 }, { nombre: 'J', valor: 10 }, { nombre: 'Q', valor: 10 }, { nombre: 'K', valor: 10 },
     ];
-    let mazo = [];
-    for (let p of palos) { for (let v of valores) { mazo.push({ ...v, palo: p }); } }
-    for (let i = mazo.length - 1; i > 0; i--) {
+    let zapato = [];
+    for (let d = 0; d < 4; d++)
+      for (let p of palos)
+        for (let v of valores)
+          zapato.push({ ...v, palo: p });
+    // Fisher-Yates shuffle
+    for (let i = zapato.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [mazo[i], mazo[j]] = [mazo[j], mazo[i]];
+      [zapato[i], zapato[j]] = [zapato[j], zapato[i]];
     }
-    return mazo;
+    return zapato;
   };
 
+  // Calcula puntos con As flexible
   const calcularPuntos = (mano) => {
-    let puntos = mano.reduce((tot, c) => tot + c.valor, 0);
+    let pts = mano.reduce((t, c) => t + c.valor, 0);
     let ases = mano.filter(c => c.nombre === 'A').length;
-    while (puntos > 21 && ases > 0) { puntos -= 10; ases -= 1; }
-    return puntos;
+    while (pts > 21 && ases > 0) { pts -= 10; ases--; }
+    return pts;
   };
 
-  const finalizarManoCasino = (resultado) => {
-    let nuevasMonedas = monedas;
-    let nuevaRacha = rachaActual;
+  const esBJ = (mano) => mano.length === 2 && calcularPuntos(mano) === 21;
 
+  // Gestiona monedas al final de una mano
+  const resolverPago = (resultado, apuesta, esBJNatural = false) => {
+    let ganancia = 0;
     if (resultado === 'ganado') {
-      nuevaRacha = rachaActual + 1;
-      nuevasMonedas = monedas + apuestaActual;
+      ganancia = esBJNatural ? Math.floor(apuesta * 1.5) : apuesta; // BJ paga 3:2
+      const nuevaRacha = rachaActual + 1;
       setRachaActual(nuevaRacha);
       guardarDatoCasinoLocal('@bj_racha_actual', nuevaRacha);
-
       if (nuevaRacha > rachaMaxima) {
         setRachaMaxima(nuevaRacha);
         guardarDatoCasinoLocal('@bj_racha_maxima', nuevaRacha);
       }
     } else if (resultado === 'perdido') {
-      nuevaRacha = 0;
-      nuevasMonedas = monedas - apuestaActual;
+      ganancia = -apuesta;
       setRachaActual(0);
       guardarDatoCasinoLocal('@bj_racha_actual', 0);
     }
+    // empate: ganancia = 0, se devuelve la apuesta (ya descontada al inicio)
+    return ganancia;
+  };
 
-    setMonedas(nuevasMonedas);
-    guardarDatoCasinoLocal('@bj_monedas', nuevasMonedas);
+  const finalizarMano = (manoJ, manoC, apuesta, isSplit = false, esBJNat = false) => {
+    const pJ = calcularPuntos(manoJ);
+    const pC = calcularPuntos(manoC);
+    let res = '', msg = '';
 
-    const saldoComprobado = verificarAuxilioBancarrota(nuevasMonedas, true);
-    if (apuestaActual > saldoComprobado) setApuestaActual(saldoComprobado);
+    if (pJ > 21) {
+      res = 'perdido'; msg = 'Te has pasado de 21. Gana la casa.';
+    } else if (pC > 21) {
+      res = 'ganado'; msg = 'El crupier se pasa. ¡Victoria!';
+    } else if (esBJNat && !esBJ(manoC)) {
+      res = 'ganado'; msg = 'BLACKJACK NATURAL! Cobras 3:2.';
+    } else if (pJ > pC) {
+      res = 'ganado'; msg = 'Mayor puntuación. Has ganado la mano.';
+    } else if (pC > pJ) {
+      res = 'perdido'; msg = 'El crupier tiene mejor mano. Gana la casa.';
+    } else {
+      res = 'empate'; msg = 'Empate. Se devuelve la apuesta.';
+    }
+    return { res, msg };
   };
 
   const iniciarPartidaBlackjack = () => {
     if (monedas < apuestaActual) {
-      Alert.alert('Falta saldo', `No tienes suficientes monedas para la apuesta de ${apuestaActual}.`);
+      Alert.alert('Falta saldo', `No tienes suficientes monedas.`);
       return;
     }
+    // Descontar apuesta
+    const saldoResta = monedas - apuestaActual;
+    setMonedas(saldoResta);
+    guardarDatoCasinoLocal('@bj_monedas', saldoResta);
 
     setVerTapete(true);
     setEnPartida(false);
     setRepartiendo(true);
-    setResultadoTipo('');
-    setMensajeResultado('');
+    setResultadoTipo(''); setResultadoSplit('');
+    setMensajeResultado(''); setMensajeSplit('');
+    setManoSplit([]); setJugandoSplit(false);
+    setApuestaDoble(0); setHaySeguro(false);
+    setOfrecerSeguro(false); setSeguroPagado(false);
 
-    const mazoNuevo = inicializarBaraja();
-    const cJ1 = mazoNuevo.pop();
-    const cC1 = mazoNuevo.pop();
-    const cJ2 = mazoNuevo.pop();
-    const cC2 = mazoNuevo.pop();
+    const zapato = crearZapato();
+    const cJ1 = zapato.pop();
+    const cC1 = zapato.pop();
+    const cJ2 = zapato.pop();
+    const cC2 = zapato.pop(); // carta oculta del crupier
 
     setManoJugador([cJ1]);
     setManoCrupier([cC1]);
-    setBaraja(mazoNuevo);
-
-    setTimeout(() => { setManoJugador([cJ1, cJ2]); }, 400);
+    setBaraja(zapato);
 
     setTimeout(() => {
-      const manoInicialJugador = [cJ1, cJ2];
-      const manoInicialCrupier = [cC1, cC2];
+      setManoJugador([cJ1, cJ2]);
+    }, 400);
 
-      setManoCrupier(manoInicialCrupier);
+    setTimeout(() => {
+      const manoJ = [cJ1, cJ2];
+      const manoC = [cC1, cC2];
+      setManoCrupier(manoC);
       setRepartiendo(false);
 
-      const puntosJ = calcularPuntos(manoInicialJugador);
-      const puntosC = calcularPuntos(manoInicialCrupier);
+      const pJ = calcularPuntos(manoJ);
+      const pC = calcularPuntos(manoC);
+      const bjJ = esBJ(manoJ);
+      const bjC = esBJ(manoC);
 
-      if (puntosJ === 21 || puntosC === 21) {
-        setEnPartida(false);
-        if (puntosJ === 21 && puntosC === 21) {
-          setResultadoTipo('empate');
-          setMensajeResultado('🤝 Doble Blackjack Natural. Empate en la mesa.');
-          finalizarManoCasino('empate');
-        } else if (puntosJ === 21) {
-          setResultadoTipo('ganado');
-          setMensajeResultado('🎉 ¡BLACKJACK NATURAL! Ganas la mano.');
-          finalizarManoCasino('ganado');
-        } else {
-          setResultadoTipo('perdido');
-          setMensajeResultado('❌ Blackjack del crupier. Gana la casa.');
-          finalizarManoCasino('perdido');
-        }
-      } else {
-        setEnPartida(true);
+      // ── Comprobar si ofrecer seguro (carta visible del crupier es As)
+      if (cC1.nombre === 'A' && !bjJ) {
+        setOfrecerSeguro(true);
+        setEnPartida(true); // dejamos que el jugador decida
+        setPuedeDoble(false);
+        setPuedeSplit(false);
+        return;
       }
+
+      // ── BJ natural
+      if (bjJ || bjC) {
+        setEnPartida(false);
+        let gananciaTotal = 0;
+        if (bjJ && bjC) {
+          setResultadoTipo('empate');
+          setMensajeResultado('Doble Blackjack Natural. Empate.');
+          // Devolver apuesta (ya descontada)
+          const s = saldoResta + apuestaActual;
+          setMonedas(s); guardarDatoCasinoLocal('@bj_monedas', s);
+        } else if (bjJ) {
+          const g = resolverPago('ganado', apuestaActual, true);
+          const s = saldoResta + apuestaActual + g;
+          setMonedas(s); guardarDatoCasinoLocal('@bj_monedas', s);
+          verificarAuxilioBancarrota(s);
+          setResultadoTipo('ganado');
+          setMensajeResultado(`BLACKJACK! Ganas ${g} monedas.`);
+        } else {
+          resolverPago('perdido', apuestaActual);
+          verificarAuxilioBancarrota(saldoResta);
+          setResultadoTipo('perdido');
+          setMensajeResultado('Blackjack del crupier. Gana la casa.');
+        }
+        return;
+      }
+
+      // ── Partida normal
+      setPuedeDoble(true); // solo con 2 cartas iniciales
+      setPuedeSplit(manoJ[0].valor === manoJ[1].valor);
+      setEnPartida(true);
     }, 800);
   };
 
-  const pedirCarta = () => {
-    if (!enPartida || repartiendo) return;
-    const mazoCopia = [...baraja];
-    const nuevaCarta = mazoCopia.pop();
-    const nuevaMano = [...manoJugador, nuevaCarta];
+  const rechazarSeguro = () => {
+    setOfrecerSeguro(false);
+    setPuedeDoble(true);
+    setPuedeSplit(manoJugador.length === 2 && manoJugador[0].valor === manoJugador[1].valor);
+  };
 
-    setManoJugador(nuevaMano);
-    setBaraja(mazoCopia);
-
-    if (calcularPuntos(nuevaMano) > 21) {
-      setResultadoTipo('perdido');
-      setMensajeResultado('Te has pasado de 21. Gana la casa.');
+  const aceptarSeguro = () => {
+    const costeSeguro = Math.floor(apuestaActual / 2);
+    if (monedas < costeSeguro) { Alert.alert('Falta saldo', 'No tienes monedas para el seguro.'); return; }
+    const s = monedas - costeSeguro;
+    setMonedas(s); guardarDatoCasinoLocal('@bj_monedas', s);
+    setHaySeguro(true);
+    setOfrecerSeguro(false);
+    if (esBJ(manoCrupier)) {
+      const cobro = costeSeguro * 2;
+      const final = s + cobro;
+      setMonedas(final); guardarDatoCasinoLocal('@bj_monedas', final);
+      setSeguroPagado(true);
       setEnPartida(false);
-      finalizarManoCasino('perdido');
+      setResultadoTipo('perdido');
+      setMensajeResultado(`Blackjack del crupier. Seguro cobrado: +${cobro} monedas.`);
+    } else {
+      setSeguroPagado(true);
+      setPuedeDoble(true);
+      setPuedeSplit(manoJugador.length === 2 && manoJugador[0].valor === manoJugador[1].valor);
     }
   };
 
-  const plantarse = () => {
-    if (!enPartida || repartiendo) return;
-    let mazoCopia = [...baraja];
-    let manoC = [...manoCrupier];
+  const pedirCarta = () => {
+    if (!enPartida || repartiendo || ofrecerSeguro) return;
+    const zapato = [...baraja];
+    const carta = zapato.pop();
 
-    const ejecutarTurnoCrupier = () => {
-      let puntosJ = calcularPuntos(manoJugador);
-      let puntosC = calcularPuntos(manoC);
+    if (jugandoSplit) {
+      const mano = [...manoSplit, carta];
+      setManoSplit(mano);
+      setBaraja(zapato);
+      setPuedeDoble(false); setPuedeSplit(false);
+      if (calcularPuntos(mano) > 21) {
+        // Split mano 2 busto → turno crupier
+        setEnPartida(false);
+        ejecutarTurnoCrupier(zapato, [...manoCrupier], manoJugador, mano, monedas - apuestaActual);
+      }
+    } else {
+      const mano = [...manoJugador, carta];
+      setManoJugador(mano);
+      setBaraja(zapato);
+      setPuedeDoble(false); setPuedeSplit(false);
+      if (calcularPuntos(mano) > 21) {
+        if (manoSplit.length > 0) {
+          // Mano 1 busto, pasar a mano 2
+          setResultadoTipo('perdido');
+          setMensajeResultado('Te pasaste en la primera mano.');
+          setJugandoSplit(true);
+        } else {
+          setEnPartida(false);
+          setResultadoTipo('perdido');
+          setMensajeResultado('Te has pasado de 21. Gana la casa.');
+          verificarAuxilioBancarrota(monedas);
+        }
+      }
+    }
+  };
 
-      if (puntosC < 17 || (puntosC < puntosJ && puntosC <= 21)) {
-        const nuevaCarta = mazoCopia.pop();
-        manoC.push(nuevaCarta);
-        setManoCrupier([...manoC]);
-        setBaraja(mazoCopia);
-        setTimeout(ejecutarTurnoCrupier, 600);
+  const doblarApuesta = () => {
+    if (!enPartida || !puedeDoble) return;
+    if (monedas < apuestaActual) { Alert.alert('Falta saldo', 'No tienes monedas para doblar.'); return; }
+    const s = monedas - apuestaActual;
+    setMonedas(s); guardarDatoCasinoLocal('@bj_monedas', s);
+    const doble = apuestaActual;
+    setApuestaDoble(doble);
+    setPuedeDoble(false); setPuedeSplit(false);
+
+    const zapato = [...baraja];
+    const carta = zapato.pop();
+    const nuevaMano = [...manoJugador, carta];
+    setManoJugador(nuevaMano);
+    setBaraja(zapato);
+
+    setTimeout(() => {
+      if (calcularPuntos(nuevaMano) > 21) {
+        setEnPartida(false);
+        setResultadoTipo('perdido');
+        setMensajeResultado('Doble — te has pasado. Gana la casa.');
+        verificarAuxilioBancarrota(s);
       } else {
         setEnPartida(false);
-        let finalRes = '';
-        if (puntosC > 21) {
-          finalRes = 'ganado';
-          setMensajeResultado('El crupier se ha pasado. Victoria para ti.');
-        } else if (puntosJ > puntosC) {
-          finalRes = 'ganado';
-          setMensajeResultado('Mayor puntuación. Has ganado la mano.');
-        } else if (puntosC > puntosJ) {
-          finalRes = 'perdido';
-          setMensajeResultado('El crupier tiene mejor mano. Gana la casa.');
-        } else {
-          finalRes = 'empate';
-          setMensajeResultado('Empate técnico en la mesa.');
+        ejecutarTurnoCrupier(zapato, [...manoCrupier], nuevaMano, [], s, doble);
+      }
+    }, 300);
+  };
+
+  const hacerSplit = () => {
+    if (!enPartida || !puedeSplit) return;
+    if (monedas < apuestaActual) { Alert.alert('Falta saldo', 'No tienes monedas para el split.'); return; }
+    const s = monedas - apuestaActual;
+    setMonedas(s); guardarDatoCasinoLocal('@bj_monedas', s);
+
+    const zapato = [...baraja];
+    const carta1 = manoJugador[0];
+    const carta2 = manoJugador[1];
+    const nuevaCarta1 = zapato.pop();
+    const nuevaCarta2 = zapato.pop();
+    const mano1 = [carta1, nuevaCarta1];
+    const mano2 = [carta2, nuevaCarta2];
+
+    setManoJugador(mano1);
+    setManoSplit(mano2);
+    setBaraja(zapato);
+    setPuedeDoble(false); setPuedeSplit(false);
+
+    if (carta1.nombre === 'A') {
+      // Split de Ases: una carta por mano, resolver directo
+      setEnPartida(false);
+      setTimeout(() => ejecutarTurnoCrupier(zapato, [...manoCrupier], mano1, mano2, s, 0), 400);
+    } else {
+      setJugandoSplit(false); // jugar mano 1 primero
+      setEnPartida(true);
+    }
+  };
+
+  const rendirseBlackjack = () => {
+    if (!enPartida || !puedeDoble) return; // solo disponible con 2 cartas iniciales
+    const devuelto = Math.floor(apuestaActual / 2);
+    // La apuesta ya fue descontada al inicio, devolvemos la mitad
+    const s = monedas + devuelto;
+    setMonedas(s); guardarDatoCasinoLocal('@bj_monedas', s);
+    setEnPartida(false);
+    setResultadoTipo('perdido');
+    setMensajeResultado(`Te rindes. Recuperas ${devuelto} monedas.`);
+  };
+
+  const plantarse = (manoOverride = null, barajaOverride = null, saldoOverride = null, dobleOverride = null) => {
+    if (!enPartida && !manoOverride) return;
+
+    // Si hay split y estamos en mano 1, pasar a mano 2
+    if (!jugandoSplit && manoSplit.length > 0 && !manoOverride) {
+      setJugandoSplit(true);
+      return;
+    }
+
+    const manoFinal = manoOverride || (jugandoSplit ? manoSplit : manoJugador);
+    const barajaFinal = barajaOverride || [...baraja];
+    setEnPartida(false);
+    ejecutarTurnoCrupier(
+      barajaFinal,
+      [...manoCrupier],
+      jugandoSplit ? manoJugador : manoFinal,
+      jugandoSplit ? manoFinal : manoSplit,
+      saldoOverride ?? monedas,
+      dobleOverride ?? apuestaDoble,
+    );
+  };
+
+  const ejecutarTurnoCrupier = (zapato, manoC, mJ1, mJ2, saldoBase, dobleExtra = 0) => {
+    // saldoBase: saldo DESPUÉS de descontar todas las apuestas
+    const turno = () => {
+      const pC = calcularPuntos(manoC);
+      if (pC < 17) {
+        const carta = zapato.pop();
+        manoC.push(carta);
+        setManoCrupier([...manoC]);
+        setBaraja([...zapato]);
+        setTimeout(turno, 550);
+      } else {
+        // Resolver mano principal
+        const { res: r1, msg: m1 } = finalizarMano(mJ1, manoC);
+        setResultadoTipo(r1);
+        setMensajeResultado(m1);
+
+        // Calcular saldo final partiendo de saldoBase (apuestas ya descontadas)
+        let saldoFinal = saldoBase;
+        // Devolver apuesta principal + ganancias
+        if (r1 === 'ganado') saldoFinal += apuestaActual * 2; // apuesta + premio
+        else if (r1 === 'empate') saldoFinal += apuestaActual; // solo devolver
+
+        // Doblar: si ganó devolver también la apuesta doble + premio
+        if (dobleExtra > 0) {
+          if (r1 === 'ganado') saldoFinal += dobleExtra * 2;
+          else if (r1 === 'empate') saldoFinal += dobleExtra;
         }
-        setResultadoTipo(finalRes);
-        finalizarManoCasino(finalRes);
+
+        // Resolver split si existe
+        if (mJ2 && mJ2.length > 0) {
+          const { res: r2, msg: m2 } = finalizarMano(mJ2, manoC);
+          setResultadoSplit(r2);
+          setMensajeSplit(m2);
+          if (r2 === 'ganado') saldoFinal += apuestaActual * 2;
+          else if (r2 === 'empate') saldoFinal += apuestaActual;
+        }
+
+        setMonedas(saldoFinal);
+        guardarDatoCasinoLocal('@bj_monedas', saldoFinal);
+        verificarAuxilioBancarrota(saldoFinal);
+
+        // Actualizar racha
+        if (r1 === 'ganado') {
+          const nr = rachaActual + 1;
+          setRachaActual(nr);
+          guardarDatoCasinoLocal('@bj_racha_actual', nr);
+          if (nr > rachaMaxima) { setRachaMaxima(nr); guardarDatoCasinoLocal('@bj_racha_maxima', nr); }
+        } else if (r1 === 'perdido') {
+          setRachaActual(0);
+          guardarDatoCasinoLocal('@bj_racha_actual', 0);
+        }
       }
     };
-    ejecutarTurnoCrupier();
+    turno();
   };
 
   // Lógica de la Ruleta
@@ -1418,14 +1637,20 @@ export default function Casino() {
             ) : (
               <View style={styles.contenedorMesaFondoVerdeReal}>
 
+                {/* MANO CRUPIER */}
                 <View style={styles.zonaJugadorFila}>
-                  <Text style={styles.txtMarcadorEtiqueta}>CRUPIER BANCA ({!enPartida && !repartiendo ? `${calcularPuntos(manoCrupier)} PTS` : '???'})</Text>
+                  <Text style={styles.txtMarcadorEtiqueta}>
+                    CRUPIER ({(!enPartida && !repartiendo && !ofrecerSeguro) ? `${calcularPuntos(manoCrupier)} PTS` : '???'})
+                  </Text>
                   <View style={styles.filaCartasContenedor}>
-                    {manoCrupier.map((carta, index) => <RenderizarCarta key={index} nombre={carta.nombre} palo={carta.palo} oculta={enPartida && index === 1} />)}
+                    {manoCrupier.map((carta, index) => (
+                      <RenderizarCarta key={index} nombre={carta.nombre} palo={carta.palo}
+                        oculta={(enPartida || ofrecerSeguro) && index === 1} />
+                    ))}
                   </View>
                 </View>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginVertical: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginVertical: 8 }}>
                   <View style={[styles.lineaMesaSeparador, { width: '30%' }]} />
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(91,50,129,0.4)', paddingVertical: 2, paddingHorizontal: 8, borderRadius: 10 }}>
                     <Flame size={12} color="#EAB308" />
@@ -1434,38 +1659,117 @@ export default function Casino() {
                   <View style={[styles.lineaMesaSeparador, { width: '30%' }]} />
                 </View>
 
+                {/* MANO JUGADOR */}
                 <View style={styles.zonaJugadorFila}>
-                  <Text style={styles.txtMarcadorEtiqueta}>TU MANO ({calcularPuntos(manoJugador)} PTS)</Text>
+                  <Text style={styles.txtMarcadorEtiqueta}>
+                    TU MANO ({calcularPuntos(manoJugador)} PTS){jugandoSplit ? ' — JUGANDO MANO 1' : ''}
+                  </Text>
                   <View style={styles.filaCartasContenedor}>
-                    {manoJugador.map((carta, index) => <RenderizarCarta key={index} nombre={carta.nombre} palo={carta.palo} oculta={false} />)}
+                    {manoJugador.map((carta, index) => (
+                      <RenderizarCarta key={index} nombre={carta.nombre} palo={carta.palo} oculta={false} />
+                    ))}
                   </View>
                 </View>
 
-                {/* BANNER DE RESULTADO FIJO CON CONTENEDOR SIEMPRE RENDERIZADO */}
-                <View style={[
-                  styles.bannerResultadoFino,
-                  {
-                    backgroundColor: mensajeResultado ? (resultadoTipo === 'ganado' ? '#DEF7EC' : resultadoTipo === 'perdido' ? '#FDE8E8' : '#FEF08A') : 'transparent',
-                    borderColor: mensajeResultado ? (resultadoTipo === 'ganado' ? '#34C759' : resultadoTipo === 'perdido' ? '#FF3B30' : '#EAB308') : 'transparent'
-                  }
-                ]}><Text style={[
-                    styles.txtBannerResultadoText,
-                    {
-                      color: mensajeResultado ? (resultadoTipo === 'ganado' ? '#1E4620' : resultadoTipo === 'perdido' ? '#6B1D1D' : '#713F12') : 'transparent'
-                    }
-                  ]}>{mensajeResultado || ' '}</Text></View>
+                {/* MANO SPLIT (si existe) */}
+                {manoSplit.length > 0 && (
+                  <View style={[styles.zonaJugadorFila, { opacity: jugandoSplit ? 1 : 0.5 }]}>
+                    <Text style={styles.txtMarcadorEtiqueta}>
+                      MANO 2 — SPLIT ({calcularPuntos(manoSplit)} PTS){jugandoSplit ? ' — JUGANDO AHORA' : ''}
+                    </Text>
+                    <View style={styles.filaCartasContenedor}>
+                      {manoSplit.map((carta, index) => (
+                        <RenderizarCarta key={index} nombre={carta.nombre} palo={carta.palo} oculta={false} />
+                      ))}
+                    </View>
+                    {resultadoSplit !== '' && (
+                      <View style={[styles.bannerResultadoFino, {
+                        backgroundColor: resultadoSplit === 'ganado' ? '#DEF7EC' : resultadoSplit === 'perdido' ? '#FDE8E8' : '#FEF3C7',
+                        borderColor: resultadoSplit === 'ganado' ? '#34C759' : resultadoSplit === 'perdido' ? '#FF3B30' : '#EAB308',
+                        marginTop: 6,
+                      }]}>
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: resultadoSplit === 'ganado' ? '#1E4620' : resultadoSplit === 'perdido' ? '#6B1D1D' : '#713F12' }}>
+                          {mensajeSplit}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
 
-                <View style={{ paddingHorizontal: 4, marginTop: 12, gap: 10 }}>
-                  {enPartida ? (
+                {/* BANNER RESULTADO */}
+                <View style={[styles.bannerResultadoFino, {
+                  backgroundColor: mensajeResultado ? (resultadoTipo === 'ganado' ? '#DEF7EC' : resultadoTipo === 'perdido' ? '#FDE8E8' : '#FEF3C7') : 'transparent',
+                  borderColor: mensajeResultado ? (resultadoTipo === 'ganado' ? '#34C759' : resultadoTipo === 'perdido' ? '#FF3B30' : '#EAB308') : 'transparent',
+                }]}>
+                  <Text style={[styles.txtBannerResultadoText, {
+                    color: mensajeResultado ? (resultadoTipo === 'ganado' ? '#1E4620' : resultadoTipo === 'perdido' ? '#6B1D1D' : '#713F12') : 'transparent',
+                  }]}>{mensajeResultado || ' '}</Text>
+                </View>
+
+                <View style={{ paddingHorizontal: 4, marginTop: 10, gap: 8 }}>
+
+                  {/* SEGURO — oferta */}
+                  {ofrecerSeguro && (
                     <>
-                      <TouchableOpacity disabled={repartiendo} style={styles.btnBlackjackFijoBlanco} onPress={pedirCarta}>
-                        <Text style={styles.txtBtnAccionSecundarioText}>PEDIR CARTA</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity disabled={repartiendo} style={styles.btnBlackjackFijoMorado} onPress={plantarse}>
-                        <Text style={styles.txtBtnAccionPrincipalText}>PLANTARSE</Text>
-                      </TouchableOpacity>
+                      <Text style={{ color: '#FEF08A', fontSize: 12, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                        El crupier muestra un As. ¿Quieres contratar un seguro?{'\n'}Cuesta {Math.floor(apuestaActual / 2)} monedas. Paga 2:1 si tiene Blackjack.
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity style={[styles.btnCasinoAccionSecundario, { flex: 1 }]} onPress={rechazarSeguro}>
+                          <Text style={{ color: '#D1D5DB', fontWeight: '900', fontSize: 13 }}>NO, SEGUIR</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.btnBlackjackFijoMorado, { flex: 1 }]} onPress={aceptarSeguro}>
+                          <Text style={styles.txtBtnAccionPrincipalText}>CONTRATAR SEGURO</Text>
+                        </TouchableOpacity>
+                      </View>
                     </>
-                  ) : (
+                  )}
+
+                  {/* BOTONES EN PARTIDA */}
+                  {enPartida && !ofrecerSeguro && (
+                    <>
+                      {/* Fila principal: Pedir + Plantarse */}
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity disabled={repartiendo} style={[styles.btnBlackjackFijoBlanco, { flex: 1 }]} onPress={pedirCarta}>
+                          <Text style={styles.txtBtnAccionSecundarioText}>PEDIR</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity disabled={repartiendo} style={[styles.btnBlackjackFijoMorado, { flex: 1 }]} onPress={() => plantarse()}>
+                          <Text style={styles.txtBtnAccionPrincipalText}>PLANTARSE</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Fila secundaria: Doblar + Split + Rendirse */}
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        {puedeDoble && (
+                          <TouchableOpacity
+                            style={[styles.btnCasinoAccionSecundario, { flex: 1, opacity: monedas >= apuestaActual ? 1 : 0.4 }]}
+                            onPress={doblarApuesta} disabled={monedas < apuestaActual}
+                          >
+                            <Text style={{ color: '#FEF08A', fontWeight: '800', fontSize: 12 }}>DOBLAR</Text>
+                            <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '600' }}>×2 apuesta</Text>
+                          </TouchableOpacity>
+                        )}
+                        {puedeSplit && (
+                          <TouchableOpacity
+                            style={[styles.btnCasinoAccionSecundario, { flex: 1, opacity: monedas >= apuestaActual ? 1 : 0.4 }]}
+                            onPress={hacerSplit} disabled={monedas < apuestaActual}
+                          >
+                            <Text style={{ color: '#34D399', fontWeight: '800', fontSize: 12 }}>SPLIT</Text>
+                            <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '600' }}>dividir mano</Text>
+                          </TouchableOpacity>
+                        )}
+                        {puedeDoble && (
+                          <TouchableOpacity style={[styles.btnCasinoAccionSecundario, { flex: 1 }]} onPress={rendirseBlackjack}>
+                            <Text style={{ color: '#F87171', fontWeight: '800', fontSize: 12 }}>RENDIRSE</Text>
+                            <Text style={{ color: '#9CA3AF', fontSize: 10, fontWeight: '600' }}>-{Math.floor(apuestaActual / 2)}</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </>
+                  )}
+
+                  {/* BOTONES POST-MANO */}
+                  {!enPartida && !ofrecerSeguro && (
                     <>
                       <TouchableOpacity style={styles.btnOtraPartidaVerde} onPress={iniciarPartidaBlackjack}>
                         <Text style={styles.txtBtnOtraPartidaText}>NUEVA MANO</Text>
@@ -1477,7 +1781,6 @@ export default function Casino() {
                     </>
                   )}
                 </View>
-
               </View>
             )}
           </View>
